@@ -76,7 +76,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {/* Logo Image */}
                 <div className="w-10 h-10 flex items-center justify-center overflow-hidden rounded-xl bg-white">
   <img
-    src="/cebi-icon.png"
+    src="./cebi-icon.png"
     alt="CEBİ"
     className="w-full h-full object-contain"
   />
