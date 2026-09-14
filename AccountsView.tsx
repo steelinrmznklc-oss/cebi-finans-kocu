@@ -123,34 +123,47 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
       {/* SECTION 1: BANK ACCOUNTS */}
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
+<div className="relative overflow-hidden rounded-3xl bg-[#0B1F33] p-6 sm:p-7 shadow-xl">
+  <div className="absolute -right-16 -top-20 h-48 w-48 rounded-full bg-emerald-500/10 blur-2xl" />
+  <div className="absolute -bottom-24 left-1/3 h-40 w-40 rounded-full bg-emerald-400/5 blur-2xl" />
 
-          <div>
-            <div className="flex items-center gap-2">
-              <Building2 className="w-5 h-5 text-emerald-600" />
-
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
-                Banka Hesapları & Varlıklar
-              </h1>
-            </div>
-
-            <p className="text-xs text-slate-500 mt-1">
-              Vadesiz, vadeli ve birikim hesaplarındaki toplam likit paranız:{' '}
-              <strong className="text-emerald-700 font-extrabold text-sm">
-                {formatCurrency(totalLiquid)}
-              </strong>
-            </p>
-          </div>
-
-          <button
-            id="add-bank-account-btn"
-            onClick={() => setOpenAccountModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Yeni Hesap Ekle</span>
-          </button>
+  <div className="relative flex flex-col sm:flex-row sm:items-center justify-between gap-5">
+    <div>
+      <div className="flex items-center gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-500/15 ring-1 ring-emerald-400/20">
+          <Building2 className="h-5 w-5 text-emerald-400" />
         </div>
+
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-emerald-400">
+            CEBİ • Varlıklar
+          </p>
+
+          <h1 className="mt-0.5 text-xl sm:text-2xl font-black tracking-tight text-white">
+            Banka Hesapları
+          </h1>
+        </div>
+      </div>
+
+      <p className="mt-4 text-xs text-slate-300">
+        Tüm hesaplarınızdaki toplam likit varlık
+      </p>
+
+      <div className="mt-1 text-2xl sm:text-3xl font-black tracking-tight text-white">
+        {formatCurrency(totalLiquid)}
+      </div>
+    </div>
+
+    <button
+      id="add-bank-account-btn"
+      onClick={() => setOpenAccountModal(true)}
+      className="relative inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-xs font-extrabold text-white shadow-lg shadow-emerald-950/20 transition hover:bg-emerald-400 active:scale-[0.98] cursor-pointer"
+    >
+      <Plus className="h-4 w-4" />
+      Yeni Hesap Ekle
+    </button>
+  </div>
+</div>
 
         {accounts.length === 0 ? (
           <div className="p-10 bg-white rounded-2xl border border-dashed border-slate-200 text-center">
