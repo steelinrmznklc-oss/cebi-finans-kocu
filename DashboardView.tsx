@@ -24,7 +24,7 @@ import {
   BankAccount,
   Income,
   ScheduledPayment,
-} from '../types/finance';
+} from './finance';
 import {
   formatCurrency,
   formatTurkishDate,
@@ -32,7 +32,7 @@ import {
   formatTurkishMonth,
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_COLORS,
-} from '../utils/financialCalculations';
+} from './financialCalculations';
 import { NavTab } from './Navbar';
 
 export interface DashboardViewProps {
