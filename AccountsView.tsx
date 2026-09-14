@@ -323,12 +323,14 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
               <div
                 key={inc.id}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-xs flex items-center justify-between gap-3"
+                className="group bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg transition-all duration-200 flex items-center justify-between gap-3"
               >
 
                 <div className="flex items-center gap-3 min-w-0">
 
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold text-sm shrink-0">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 flex items-center justify-center font-black text-sm shrink-0">
+  ₺
+</div>
                     ₺
                   </div>
 
@@ -362,7 +364,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
                   <div className="text-right">
 
-                    <div className="font-black text-base text-emerald-700">
+                    <div className="font-black text-base text-emerald-600">
                       +{formatCurrency(inc.amount)}
                     </div>
 
