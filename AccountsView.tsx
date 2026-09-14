@@ -326,49 +326,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                 className="group bg-white p-4 rounded-2xl border border-slate-200 shadow-sm hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg transition-all duration-200 flex items-center justify-between gap-3"
               >
 
-                <div className="flex items-center gap-3 min-w-0">
-
-                  <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 flex items-center justify-center font-black text-sm shrink-0">
-  ₺
-</div>
-                    ₺
-                  </div>
-
-                  <div className="min-w-0">
-
-                    <h4 className="font-bold text-sm text-slate-900 truncate">
-                      {inc.name}
-                    </h4>
-
-                    <p className="text-xs text-slate-500 flex items-center gap-1.5 mt-0.5">
-
-                      <span className="font-medium text-slate-700">
-                        {inc.isRecurring
-                          ? 'Düzenli Gelir'
-                          : 'Tek Seferlik'}
-                      </span>
-
-                      <span>•</span>
-
-                      <span>
-                        Her ayın {inc.dayOfMonth || 1}'i
-                      </span>
-
-                    </p>
-
-                  </div>
-
-                </div>
-
-                <div className="flex items-center gap-3 shrink-0">
-
-                  <div className="text-right">
-
-                    <div className="font-black text-base text-emerald-600">
-                      +{formatCurrency(inc.amount)}
-                    </div>
-
-                  </div>
+<div className="flex items-center gap-3 min-w-0">
 
                   <button
                     title="Sil"
