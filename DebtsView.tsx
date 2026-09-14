@@ -21,12 +21,12 @@ import {
   OtherDebt,
   BankAccount,
   FinancialSnapshot,
-} from '../types/finance';
+} from './finance';
 import {
   formatCurrency,
   formatTurkishDate,
   getRelativeDaysInfo,
-} from '../utils/financialCalculations';
+} from './financialCalculations';
 
 interface DebtsViewProps {
   creditCards: CreditCard[];
