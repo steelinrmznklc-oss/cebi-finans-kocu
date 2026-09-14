@@ -1,0 +1,17 @@
+{
+  "name": "CEBİ – Kişisel Finans Koçu",
+  "short_name": "CEBİ",
+  "start_url": "/cebi-finans-kocu/",
+  "scope": "/cebi-finans-kocu/",
+  "display": "standalone",
+  "background_color": "#F7F8FA",
+  "theme_color": "#0B1F33",
+  "icons": [
+    {
+      "src": "/cebi-finans-kocu/cebi-icon.png",
+      "sizes": "530x535",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
