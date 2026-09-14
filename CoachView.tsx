@@ -19,7 +19,7 @@ import {
   FinancialSnapshot,
   CoachMessage,
 } from '../types/finance';
-import { formatCurrency } from '../utils/financialCalculations';
+import { formatCurrency } from './financialCalculations';
 
 interface CoachViewProps {
   snapshot: FinancialSnapshot;
