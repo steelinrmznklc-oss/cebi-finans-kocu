@@ -12,7 +12,7 @@ import {
   Building2,
   Settings,
 } from 'lucide-react';
-import { formatCurrency } from '../utils/financialCalculations';
+import { formatCurrency } from '../financialCalculations';
 
 export type NavTab = 'dashboard' | 'expenses' | 'debts' | 'coach' | 'more' | 'accounts' | 'calendar' | 'reports' | 'settings';
 
