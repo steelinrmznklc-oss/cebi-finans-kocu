@@ -13,10 +13,10 @@ import {
   Plus,
   Clock,
   PiggyBank,
-  HelpCircle,
   CreditCard as CreditCardIcon,
   Layers,
   ArrowRight,
+  Zap,
 } from 'lucide-react';
 import {
   FinancialSnapshot,
@@ -47,7 +47,7 @@ export interface DashboardViewProps {
 }
 
 /**
- * Returns clean, visual badges for transaction classification (Requirement 9)
+ * Returns clean, visual badges for transaction classification
  */
 export function getTransactionBadge(exp: Expense): {
   label: string;
@@ -120,17 +120,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
     .slice(0, 5);
 
-  // Filter upcoming payments from snapshot.debtDetails or scheduledPayments
+  // Filter upcoming payments from snapshot.debtDetails
   const upcomingPayments = snapshot.debtDetails
     .filter((d) => d.dueDate)
     .slice(0, 5);
 
   // Filter expected incomes that haven't arrived yet
   const pendingIncomes = incomes.length > 0
-    ? incomes.filter((inc) => {
-        // If recurring or has payment date
-        return inc.amount > 0;
-      })
+    ? incomes.filter((inc) => inc.amount > 0)
     : snapshot.incomes;
 
   const todayStr = new Intl.DateTimeFormat('tr-TR', {
@@ -141,258 +138,232 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   }).format(new Date());
 
   return (
-    <div className="space-y-6 pb-20 md:pb-10 max-w-7xl mx-auto">
+    <div className="space-y-6 pb-24 md:pb-6 max-w-7xl mx-auto">
       {/* ========================================================================= */}
-      {/* 1. HEADER & QUICK ACTIONS */}
+      {/* 1. PREMIUM HEADER WITH GREETING & QUICK ACTIONS */}
       {/* ========================================================================= */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-4">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-6 sm:p-8 rounded-2xl shadow-lg space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black tracking-widest text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
-                CEBİ
-              </span>
-              <span className="text-slate-300">•</span>
-              <span className="text-xs font-semibold text-slate-500">
-                {todayStr}
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-2 h-2 rounded-full bg-emerald-400"></div>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                {formatTurkishMonth()} Dönemi
               </span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight mt-1.5">
-              Finansal durumun bugün
+            <h1 className="text-3xl sm:text-4xl font-black tracking-tight">
+              Finansal Durumun Bugün
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-              {formatTurkishMonth()} dönemi • Anlık bütçe ve güvenli harcama görünümü
+            <p className="text-sm text-slate-300 mt-2">
+              {todayStr}
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              id="dash-talk-to-coach-btn"
-              onClick={() => onSelectTab('coach')}
-              className="px-3.5 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100/80 text-emerald-800 border border-emerald-200 text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-2xs"
-            >
-              <Sparkles className="w-4 h-4 text-emerald-600" />
-              <span>Koça Danış</span>
-            </button>
-          </div>
+          <button
+            id="dash-talk-to-coach-btn"
+            onClick={() => onSelectTab('coach')}
+            className="px-4 py-3 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold flex items-center gap-2 transition shadow-lg hover:shadow-xl"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span>Koça Danış</span>
+          </button>
         </div>
 
-        {/* Quick Actions Row (Requirement 8) */}
-        <div className="pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2 sm:gap-2.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
-            Hızlı İşlemler:
-          </span>
-
+        {/* Quick Actions Row */}
+        <div className="flex flex-wrap items-center gap-2.5 pt-4 border-t border-slate-700">
           <button
             id="quick-action-add-expense-btn"
             onClick={onOpenQuickExpense}
-            className="px-3.5 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+            className="px-3.5 py-2 rounded-lg bg-white hover:bg-slate-100 text-slate-900 text-xs font-bold transition flex items-center gap-1.5"
           >
-            <Plus className="w-3.5 h-3.5 text-emerald-400" />
+            <Plus className="w-4 h-4" />
             <span>+ Harcama Ekle</span>
           </button>
 
           <button
             id="quick-action-add-income-btn"
             onClick={() => onSelectTab('accounts')}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition flex items-center gap-1.5"
           >
-            <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+            <TrendingUp className="w-4 h-4" />
             <span>+ Gelir Ekle</span>
           </button>
 
           <button
             id="quick-action-pay-debt-btn"
             onClick={() => onSelectTab('debts')}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition flex items-center gap-1.5"
           >
-            <CreditCardIcon className="w-3.5 h-3.5 text-rose-600" />
+            <CreditCardIcon className="w-4 h-4" />
             <span>+ Borç Öde</span>
           </button>
 
           <button
             id="quick-action-add-payment-btn"
             onClick={() => onSelectTab('calendar')}
-            className="px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+            className="px-3.5 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-xs font-bold transition flex items-center gap-1.5"
           >
-            <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+            <Calendar className="w-4 h-4" />
             <span>+ Ödeme Ekle</span>
           </button>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 2. PRIMARY FINANCIAL STATUS & DAILY SAFE SPENDING */}
+      {/* 2. PRIMARY FINANCIAL STATUS - TWO COLUMN LAYOUT */}
       {/* ========================================================================= */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-        {/* Card 1: Şu An Kullanılabilir Param */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Card 1: Available Cash Balance */}
         <div
           id="card-current-available-cash"
           onClick={() => onSelectTab('accounts')}
-          className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs hover:border-emerald-300 transition cursor-pointer flex flex-col justify-between group"
+          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition cursor-pointer flex flex-col justify-between group"
         >
           <div>
-            <div className="flex items-center justify-between text-slate-500 mb-2">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
                 <span className="text-xs font-black uppercase tracking-wider text-slate-600">
-                  Şu An Kullanılabilir Param
+                  Şu An Kullanılabilir
                 </span>
               </div>
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-105 transition">
-                <Wallet className="w-4 h-4" />
+              <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-700 flex items-center justify-center group-hover:scale-110 transition">
+                <Wallet className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight mt-1">
+            <div className="text-4xl sm:text-5xl font-black text-slate-900 tracking-tight">
               {formatCurrency(snapshot.totalBalance)}
             </div>
 
-            <p className="text-xs font-medium text-slate-600 mt-2">
-              Şu an hesaplarında bulunan para.
+            <p className="text-sm text-slate-600 mt-3 font-medium">
+              Banka hesaplarındaki toplam bakiye
             </p>
-            <p className="text-[11px] text-slate-400 mt-0.5 font-medium">
-              *Gelecek gelirler dahil değildir.
+            <p className="text-xs text-slate-400 mt-1">
+              *Henüz yatmamış gelirler dahil değildir.
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500">
+          <div className="mt-4 pt-4 border-t border-slate-200 flex items-center justify-between text-sm">
+            <span className="text-slate-600 font-medium">
               {accounts.length > 0
-                ? `${accounts.length} banka hesabında hazır`
-                : 'Henüz banka hesabı eklemedin'}
+                ? `${accounts.length} hesapta hazır`
+                : 'Hesap eklemedin'}
             </span>
             <span className="text-emerald-700 font-bold flex items-center gap-1 group-hover:translate-x-0.5 transition">
-              <span>Hesapları Gör</span>
-              <ChevronRight className="w-3.5 h-3.5" />
+              <span>Detay</span>
+              <ChevronRight className="w-4 h-4" />
             </span>
           </div>
         </div>
 
-        {/* Card 2: Günlük Güvenli Harcama */}
+        {/* Card 2: Daily Safe Spending */}
         <div
           id="card-daily-safe-spending"
-          className={`p-5 sm:p-6 rounded-2xl border shadow-xs flex flex-col justify-between transition ${
+          className={`p-6 rounded-2xl border shadow-sm flex flex-col justify-between transition ${
             snapshot.hasCashShortfall
-              ? 'bg-amber-50/70 border-amber-200 text-amber-950'
+              ? 'bg-amber-50 border-amber-300'
               : snapshot.isOverBudget
-              ? 'bg-rose-50/70 border-rose-200 text-rose-950'
-              : 'bg-emerald-50/70 border-emerald-200 text-emerald-950'
+              ? 'bg-rose-50 border-rose-300'
+              : 'bg-emerald-50 border-emerald-300'
           }`}
         >
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <div
-                  className={`w-6 h-6 rounded-lg flex items-center justify-center ${
+                  className={`w-2.5 h-2.5 rounded-full ${
                     snapshot.hasCashShortfall
-                      ? 'bg-amber-600 text-white'
+                      ? 'bg-amber-500'
                       : snapshot.isOverBudget
-                      ? 'bg-rose-600 text-white'
-                      : 'bg-emerald-600 text-white'
+                      ? 'bg-rose-500'
+                      : 'bg-emerald-500'
                   }`}
-                >
-                  {snapshot.hasCashShortfall || snapshot.isOverBudget ? (
-                    <AlertTriangle className="w-3.5 h-3.5" />
-                  ) : (
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  )}
-                </div>
-                <span className="text-xs font-black uppercase tracking-wider">
+                ></div>
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700">
                   Günlük Güvenli Harcama
                 </span>
               </div>
 
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/80 border border-current/10">
-                Kalan: {snapshot.remainingDays} gün
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-white border border-slate-300">
+                {snapshot.remainingDays} gün kaldı
               </span>
             </div>
 
-            <div className="text-3xl sm:text-4xl font-black tracking-tight mt-1">
+            <div className="text-4xl sm:text-5xl font-black tracking-tight mt-2">
               {snapshot.hasCashShortfall || snapshot.dailySafeSpending <= 0 ? (
-                <span className="text-amber-900">0 ₺ / gün</span>
+                <span className="text-amber-900">0 ₺/gün</span>
               ) : (
-                <span className="text-emerald-950">
-                  {formatCurrency(snapshot.dailySafeSpending)} / gün
+                <span className={snapshot.isOverBudget ? 'text-rose-900' : 'text-emerald-900'}>
+                  {formatCurrency(snapshot.dailySafeSpending)}/gün
                 </span>
               )}
             </div>
 
-            <p className="text-xs font-semibold mt-2">
+            <p className={`text-sm font-semibold mt-3 ${
+              snapshot.hasCashShortfall
+                ? 'text-amber-900'
+                : snapshot.isOverBudget
+                ? 'text-rose-900'
+                : 'text-emerald-900'
+            }`}>
               {snapshot.hasCashShortfall ? (
-                <span className="text-amber-900 font-bold">
-                  Mevcut nakdin yaklaşan ödemelerini karşılamıyor.
-                </span>
+                '⚠️ Mevcut nakdin ödemeleri karşılamıyor'
               ) : snapshot.isOverBudget ? (
-                <span className="text-rose-800 font-bold">
-                  Aylık bütçe aşıldı, harcamaları durdurman önerilir.
-                </span>
+                '⚠️ Aylık bütçe aşıldı'
               ) : (
-                <span className="text-emerald-800">
-                  Yaklaşan zorunlu ödemeler dikkate alınmıştır.
-                </span>
+                '✓ Zorunlu ödemeler dikkate alındı'
               )}
             </p>
 
-            <p className="text-[11px] opacity-75 mt-0.5">
+            <p className="text-xs text-slate-600 mt-2 opacity-90">
               {snapshot.hasCashShortfall
-                ? `Ay sonuna kadarki zorunlu ödemeler (${formatCurrency(snapshot.upcomingPaymentsTotal)}) mevcut bakiyeni aşıyor.`
-                : `Bugün bu tutara kadar harcayarak ayı zorunlu ödemelerini aksatmadan güvenle kapatabilirsin.`}
+                ? `Ay sonuna kadar ${formatCurrency(snapshot.upcomingPaymentsTotal)} ödemen var.`
+                : `Bu günlük tutara harcayarak ay sonunu güvenle kapatabilirsin.`}
             </p>
           </div>
 
-          <div className="mt-4 pt-3 border-t border-current/10 flex items-center justify-between text-xs">
-            <span className="opacity-80">
+          <div className="mt-4 pt-4 border-t border-current/20 flex items-center justify-between text-sm">
+            <span className={`${snapshot.hasCashShortfall ? 'text-amber-800' : snapshot.isOverBudget ? 'text-rose-800' : 'text-emerald-800'}`}>
               Zorunlu Rezerve: {formatCurrency(snapshot.upcomingPaymentsTotal)}
             </span>
             <button
               onClick={() => onSelectTab('coach')}
-              className="font-bold underline hover:opacity-80 transition cursor-pointer"
+              className={`font-bold underline transition ${snapshot.hasCashShortfall ? 'hover:text-amber-700' : snapshot.isOverBudget ? 'hover:text-rose-700' : 'hover:text-emerald-700'}`}
             >
-              Koçun Analizi
+              Analiz
             </button>
           </div>
         </div>
       </div>
 
       {/* ========================================================================= */}
-      {/* 3. CASH SHORTFALL ALERT (Only shown if hasCashShortfall === true) */}
+      {/* 3. CASH SHORTFALL ALERT */}
       {/* ========================================================================= */}
       {snapshot.hasCashShortfall && (
         <div
           id="alert-cash-shortfall"
-          className="p-5 sm:p-6 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-xs animate-fade-in"
+          className="p-6 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-md flex items-start gap-4"
         >
-          <div className="flex items-start gap-3">
-            <div className="w-9 h-9 rounded-xl bg-amber-600 text-white flex items-center justify-center shrink-0 mt-0.5">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div className="space-y-2 flex-1">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                <h3 className="text-base font-black text-amber-950 tracking-tight">
-                  Anlık Nakit Rezervi Yetersiz
-                </h3>
-                <span className="text-xs font-extrabold px-2.5 py-0.5 rounded-md bg-amber-200 text-amber-950 self-start sm:self-auto">
-                  Nakit Açığı: -{formatCurrency(snapshot.cashShortfall)}
-                </span>
+          <div className="w-10 h-10 rounded-lg bg-amber-600 text-white flex items-center justify-center flex-shrink-0 mt-0.5">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-base font-black tracking-tight mb-1">
+              ⚠️ Nakit Rezervi Yetersiz
+            </h3>
+            <p className="text-sm font-medium mb-2">
+              Yaklaşan zorunlu ödemelerini karşılamak için{' '}
+              <strong className="font-black">{formatCurrency(snapshot.cashShortfall)}</strong> açığın var.
+            </p>
+            <p className="text-xs text-amber-900 opacity-90">
+              Mevcut bakiye ({formatCurrency(snapshot.totalBalance)}) → Zorunlu ödemeler ({formatCurrency(snapshot.upcomingPaymentsTotal)})
+            </p>
+            <div className="mt-3 flex items-center gap-2 text-xs">
+              <div className="px-2.5 py-1.5 rounded-lg bg-white border border-amber-300 font-bold">
+                Günlük güvenli: 0 ₺
               </div>
-
-              <p className="text-xs sm:text-sm text-amber-900 font-medium leading-relaxed">
-                Yaklaşan zorunlu ödemelerini karşılamak için{' '}
-                <strong className="font-black text-amber-950 underline">
-                  {formatCurrency(snapshot.cashShortfall)}
-                </strong>{' '}
-                açığın var. Şu anki banka bakiyen ({formatCurrency(snapshot.totalBalance)}) yaklaşan zorunlu ödemelerin ({formatCurrency(snapshot.upcomingPaymentsTotal)}) için yetersiz kalıyor.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3 pt-1 text-xs">
-                <div className="px-3 py-1.5 rounded-lg bg-white/80 border border-amber-200 font-bold text-amber-950">
-                  Günlük güvenli harcama: 0 ₺
-                </div>
-                <div className="text-amber-800">
-                  *Beklenen gelirlerin (örneğin maaş/avans) fiilen hesabına geçene kadar nakit harcama yapmaman önerilir.
-                </div>
-              </div>
+              <p>Beklenen gelirlerin hesaba geçene kadar harcama yapma.</p>
             </div>
           </div>
         </div>
@@ -402,98 +373,99 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       {/* 4 & 5. UPCOMING PAYMENTS & EXPECTED INCOME */}
       {/* ========================================================================= */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* 4. UPCOMING PAYMENTS */}
+        {/* Upcoming Payments */}
         <div
           id="dashboard-upcoming-payments-card"
-          className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between"
+          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <Calendar className="w-4 h-4 text-slate-600" />
-                  <h3 className="text-base font-black text-slate-900">Yaklaşan Ödemeler</h3>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Bu tutarlar borç temerrüdünü önlemek için serbest nakdinden ayrılmıştır.
-                </p>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-slate-700" />
+                <h3 className="text-lg font-black text-slate-900">Yaklaşan Ödemeler</h3>
               </div>
 
               <button
                 id="dash-view-calendar-btn"
                 onClick={() => onSelectTab('calendar')}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+                className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 transition"
               >
                 <span>Tüm Takvim</span>
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              Borç temerrüdünü önlemek için ayrılmış tutar
+            </p>
+
             {upcomingPayments.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 my-3">
+              <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 my-3">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
-                <p className="text-xs font-bold text-slate-700">
-                  Yaklaşan zorunlu ödemen bulunmuyor.
+                <p className="text-sm font-bold text-slate-700">
+                  Yaklaşan öde men yok
                 </p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Tüm kredi kartı ve taksit ödemelerin güncel.
+                <p className="text-xs text-slate-500 mt-1">
+                  Tüm ödeyeceklerin güncel durumda.
                 </p>
                 <button
                   onClick={() => onSelectTab('calendar')}
-                  className="mt-3 px-3 py-1.5 rounded-lg bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-white border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-100 transition"
                 >
                   + Ödeme Planla
                 </button>
               </div>
             ) : (
-              <div className="space-y-2.5 my-3">
+              <div className="space-y-2.5">
                 {upcomingPayments.map((item) => (
                   <div
                     key={item.id}
-                    className={`p-3 rounded-xl border transition flex items-center justify-between gap-3 ${
+                    className={`p-3.5 rounded-lg border transition flex items-center justify-between gap-3 ${
                       item.isOverdue
-                        ? 'border-rose-200 bg-rose-50/50'
-                        : 'border-slate-100 bg-slate-50/60 hover:bg-slate-50'
+                        ? 'border-rose-300 bg-rose-50/70'
+                        : item.daysUntilDue === 0
+                        ? 'border-amber-300 bg-amber-50/70'
+                        : 'border-slate-200 bg-slate-50/50 hover:bg-slate-50'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-9 h-9 rounded-lg flex items-center justify-center text-xs font-bold ${
                           item.isOverdue
-                            ? 'bg-rose-100 text-rose-700'
+                            ? 'bg-rose-200 text-rose-700'
+                            : item.daysUntilDue === 0
+                            ? 'bg-amber-200 text-amber-700'
                             : 'bg-slate-200 text-slate-700'
                         }`}
                       >
                         <Clock className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="font-bold text-xs text-slate-900">{item.name}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                          <span className="font-semibold text-slate-600">{item.type}</span>
-                          <span>•</span>
-                          <span>{formatTurkishDate(item.dueDate)}</span>
+                        <div className="font-bold text-sm text-slate-900">{item.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {item.type} • {formatTurkishDate(item.dueDate)}
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="font-black text-xs sm:text-sm text-slate-900">
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-black text-sm text-slate-900">
                         {formatCurrency(item.monthlyOrMin || item.amount)}
                       </div>
                       <span
-                        className={`inline-block text-[10px] font-bold px-1.5 py-0.2 rounded mt-0.5 ${
+                        className={`inline-block text-[10px] font-bold px-2 py-0.5 rounded mt-0.5 ${
                           item.isOverdue
-                            ? 'bg-rose-100 text-rose-700 font-extrabold'
+                            ? 'bg-rose-200 text-rose-800'
                             : item.daysUntilDue === 0
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-slate-100 text-slate-600'
+                            ? 'bg-amber-200 text-amber-800'
+                            : 'bg-slate-200 text-slate-700'
                         }`}
                       >
                         {item.isOverdue
                           ? 'Gecikmiş'
                           : item.daysUntilDue === 0
                           ? 'Bugün'
-                          : `${item.daysUntilDue} gün sonra`}
+                          : `${item.daysUntilDue}g`}
                       </span>
                     </div>
                   </div>
@@ -502,84 +474,78 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
 
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-medium">
-              Toplam Yaklaşan Yükümlülük:
-            </span>
+          <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-600 font-medium">Toplam Yaklaşan:</span>
             <span className="font-black text-slate-900 text-sm">
               {formatCurrency(snapshot.upcomingPaymentsTotal)}
             </span>
           </div>
         </div>
 
-        {/* 5. EXPECTED INCOME */}
+        {/* Expected Income */}
         <div
           id="dashboard-expected-income-card"
-          className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs flex flex-col justify-between"
+          className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-between"
         >
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-emerald-600" />
-                  <h3 className="text-base font-black text-slate-900">Beklenen Gelir</h3>
-                </div>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Bu para henüz fiilen hesaba geçmediği için mevcut nakdine dahil edilmez.
-                </p>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-emerald-600" />
+                <h3 className="text-lg font-black text-slate-900">Beklenen Gelir</h3>
               </div>
 
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+              <span className="text-[11px] font-bold px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-300">
                 Henüz hesaba geçmedi
               </span>
             </div>
 
+            <p className="text-xs text-slate-500 mb-4 font-medium">
+              Mevcut bakiyeye dahil edilmez, sadece bekleniyor
+            </p>
+
             {pendingIncomes.length === 0 ? (
-              <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 my-3">
+              <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 my-3">
                 <PiggyBank className="w-8 h-8 text-slate-400 mx-auto mb-2" />
-                <p className="text-xs font-bold text-slate-700">Beklenen gelir bulunmuyor.</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">
-                  Maaş, kira veya ek gelirlerini ekleyebilirsin.
+                <p className="text-sm font-bold text-slate-700">Beklenen gelir yok</p>
+                <p className="text-xs text-slate-500 mt-1">
+                  Maaş, kira veya ek gelir ekleyebilirsin.
                 </p>
                 <button
                   onClick={() => onSelectTab('accounts')}
-                  className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition cursor-pointer"
+                  className="mt-3 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition"
                 >
                   + Gelir Ekle
                 </button>
               </div>
             ) : (
-              <div className="space-y-2.5 my-3">
+              <div className="space-y-2.5">
                 {pendingIncomes.map((inc) => (
                   <div
                     key={inc.id}
-                    className="p-3 rounded-xl border border-slate-100 bg-slate-50/60 hover:bg-slate-50 transition flex items-center justify-between gap-3"
+                    className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between gap-3"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center text-xs font-bold">
+                      <div className="w-9 h-9 rounded-lg bg-emerald-200 text-emerald-700 flex items-center justify-center text-xs font-bold">
                         <TrendingUp className="w-4 h-4" />
                       </div>
                       <div>
-                        <div className="font-bold text-xs text-slate-900">{inc.name}</div>
-                        <div className="text-[11px] text-slate-500 flex items-center gap-1.5 mt-0.5">
-                          <span>{inc.isRecurring ? 'Düzenli Gelir' : 'Tek Seferlik'}</span>
-                          <span>•</span>
-                          <span>
-                            {inc.paymentDate
-                              ? formatTurkishDate(inc.paymentDate)
-                              : inc.dayOfMonth
-                              ? `Her ayın ${inc.dayOfMonth}. günü`
-                              : 'Ay sonuna kadar'}
-                          </span>
+                        <div className="font-bold text-sm text-slate-900">{inc.name}</div>
+                        <div className="text-xs text-slate-500 mt-0.5">
+                          {inc.isRecurring ? 'Düzenli' : 'Tek seferlik'} •{' '}
+                          {inc.paymentDate
+                            ? formatTurkishDate(inc.paymentDate)
+                            : inc.dayOfMonth
+                            ? `Her ${inc.dayOfMonth}. gün`
+                            : 'Ay içinde'}
                         </div>
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0">
-                      <div className="font-black text-xs sm:text-sm text-emerald-800">
+                    <div className="text-right flex-shrink-0">
+                      <div className="font-black text-sm text-emerald-700">
                         +{formatCurrency(inc.amount)}
                       </div>
-                      <span className="inline-block text-[10px] font-bold px-1.5 py-0.2 rounded bg-blue-50 text-blue-700 border border-blue-100 mt-0.5">
+                      <span className="inline-block text-[10px] font-bold px-2 py-0.5 rounded bg-blue-200 text-blue-800 mt-0.5">
                         Bekleniyor
                       </span>
                     </div>
@@ -589,8 +555,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             )}
           </div>
 
-          <div className="pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-medium">Toplam Beklenen Gelir:</span>
+          <div className="pt-4 border-t border-slate-200 flex items-center justify-between text-xs">
+            <span className="text-slate-600 font-medium">Toplam Beklenen:</span>
             <span className="font-black text-emerald-700 text-sm">
               +{formatCurrency(snapshot.pendingMonthlyIncome || snapshot.monthlyIncome)}
             </span>
@@ -599,143 +565,92 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 6. PLANNED DAILY BUDGET (Distinct from Daily Safe Spending) */}
+      {/* 6. MONTHLY FINANCIAL SUMMARY */}
       {/* ========================================================================= */}
-      <div
-        id="card-planned-daily-budget"
-        className="bg-slate-900 text-white p-5 sm:p-6 rounded-2xl shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
-      >
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-400"></span>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-              Planlanan Günlük Bütçe
-            </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-800 text-blue-300 border border-slate-700">
-              Aylık Hedef
-            </span>
-          </div>
-
-          <div className="text-3xl sm:text-4xl font-black tracking-tight mt-1 text-white">
-            {formatCurrency(snapshot.plannedDailyBudget)} / gün
-          </div>
-
-          <p className="text-xs text-slate-300 font-medium mt-1">
-            Beklenen gelirler gerçekleştiğinde planlanan günlük bütçen.
-          </p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            *Bu tutar anlık nakit harcama sınırın değildir. Tüm gelirler yattıktan sonra hedeflenen günlük ortalamayı ifade eder.
-          </p>
-        </div>
-
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-          <div className="p-3 rounded-xl bg-slate-800/80 border border-slate-700 text-xs text-slate-300">
-            <span className="text-slate-400 block text-[10px]">Toplam Planlanan Bütçe</span>
-            <span className="font-bold text-white text-sm">
-              {formatCurrency(snapshot.remainingBudget)}
-            </span>
-          </div>
-
-          <button
-            onClick={() => onSelectTab('coach')}
-            className="px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-xs"
-          >
-            <span>Bütçe Rehberi</span>
-            <ArrowRight className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
-      {/* 7. MONTHLY OVERVIEW (Compact summary: Gelir, Harcamalar, Borç Ödemeleri, Yaklaşan Ödemeler) */}
-      {/* ========================================================================= */}
-      <div
-        id="dashboard-monthly-overview-card"
-        className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-4"
-      >
-        <div className="flex items-center justify-between">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-base font-black text-slate-900 tracking-tight">
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">
               Aylık Finansal Özet
             </h3>
-            <p className="text-xs text-slate-500">
-              Tüketim harcamaları ve borç geri ödemeleri bağımsız olarak takip edilir.
+            <p className="text-xs text-slate-500 mt-1">
+              Tüketim harcamaları ve borç ödemeleri ayrı takip edilir
             </p>
           </div>
-          <span className="text-xs font-bold text-slate-400">
+          <span className="text-xs font-bold text-slate-500">
             {formatTurkishMonth()}
           </span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 pt-1">
-          {/* 1. Gelir */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Income */}
           <div
             id="summary-item-income"
             onClick={() => onSelectTab('accounts')}
-            className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-emerald-300 transition cursor-pointer"
+            className="p-4 rounded-lg bg-gradient-to-br from-emerald-50 to-emerald-50/50 border border-emerald-200 hover:border-emerald-300 transition cursor-pointer"
           >
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-bold text-slate-600">Gelir</span>
-              <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-emerald-800">Gelir</span>
+              <TrendingUp className="w-4 h-4 text-emerald-600" />
             </div>
-            <div className="text-lg sm:text-xl font-black text-slate-900">
+            <div className="text-xl font-black text-emerald-950">
               {formatCurrency(snapshot.monthlyIncome)}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1 font-medium">
-              Fiilen Yatan: {formatCurrency(snapshot.realizedMonthlyIncome)}
+            <p className="text-[10px] text-emerald-700 mt-2 font-medium">
+              Fiilen: {formatCurrency(snapshot.realizedMonthlyIncome)}
             </p>
           </div>
 
-          {/* 2. Harcamalar (Consumer Spending Only) */}
+          {/* Consumer Expenses */}
           <div
             id="summary-item-expenses"
             onClick={() => onSelectTab('expenses')}
-            className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-slate-300 transition cursor-pointer"
+            className="p-4 rounded-lg bg-gradient-to-br from-slate-50 to-slate-50/50 border border-slate-200 hover:border-slate-300 transition cursor-pointer"
           >
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-bold text-slate-600">Tüketim Harcamaları</span>
-              <TrendingDown className="w-3.5 h-3.5 text-slate-700" />
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700">Harcamalar</span>
+              <TrendingDown className="w-4 h-4 text-slate-600" />
             </div>
-            <div className="text-lg sm:text-xl font-black text-slate-900">
+            <div className="text-xl font-black text-slate-900">
               {formatCurrency(snapshot.monthlyExpenses)}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1 font-medium">
-              Market, fatura, ulaşım vb.
+            <p className="text-[10px] text-slate-600 mt-2 font-medium">
+              Market, fatura, ulaşım
             </p>
           </div>
 
-          {/* 3. Borç Ödemeleri (Debt Repayments - Separated!) */}
+          {/* Debt Repayments */}
           <div
             id="summary-item-debt-repayments"
             onClick={() => onSelectTab('debts')}
-            className="p-3.5 sm:p-4 rounded-xl bg-purple-50/60 border border-purple-100 hover:border-purple-300 transition cursor-pointer"
+            className="p-4 rounded-lg bg-gradient-to-br from-purple-50 to-purple-50/50 border border-purple-200 hover:border-purple-300 transition cursor-pointer"
           >
-            <div className="flex items-center justify-between text-purple-700 mb-1">
+            <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-purple-800">Borç Ödemeleri</span>
-              <CreditCardIcon className="w-3.5 h-3.5 text-purple-600" />
+              <CreditCardIcon className="w-4 h-4 text-purple-600" />
             </div>
-            <div className="text-lg sm:text-xl font-black text-purple-950">
+            <div className="text-xl font-black text-purple-950">
               {formatCurrency(snapshot.totalDebtRepayments)}
             </div>
-            <p className="text-[11px] text-purple-700 mt-1 font-medium">
-              Kart & taksit ödemeleri (Bilanço)
+            <p className="text-[10px] text-purple-700 mt-2 font-medium">
+              Kart & taksit ödemeleri
             </p>
           </div>
 
-          {/* 4. Yaklaşan Ödemeler */}
+          {/* Upcoming Payments */}
           <div
             id="summary-item-upcoming"
             onClick={() => onSelectTab('calendar')}
-            className="p-3.5 sm:p-4 rounded-xl bg-slate-50 border border-slate-100 hover:border-indigo-300 transition cursor-pointer"
+            className="p-4 rounded-lg bg-gradient-to-br from-blue-50 to-blue-50/50 border border-blue-200 hover:border-blue-300 transition cursor-pointer"
           >
-            <div className="flex items-center justify-between text-slate-500 mb-1">
-              <span className="text-xs font-bold text-slate-600">Yaklaşan Ödemeler</span>
-              <Clock className="w-3.5 h-3.5 text-indigo-600" />
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-blue-800">Yaklaşan</span>
+              <Clock className="w-4 h-4 text-blue-600" />
             </div>
-            <div className="text-lg sm:text-xl font-black text-slate-900">
+            <div className="text-xl font-black text-blue-950">
               {formatCurrency(snapshot.upcomingPaymentsTotal)}
             </div>
-            <p className="text-[11px] text-slate-500 mt-1 font-medium">
+            <p className="text-[10px] text-blue-700 mt-2 font-medium">
               Ay sonuna kadar rezerve
             </p>
           </div>
@@ -743,23 +658,20 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 8. RECENT TRANSACTIONS (With Visual Classification Tags - Requirement 9) */}
+      {/* 7. RECENT TRANSACTIONS */}
       {/* ========================================================================= */}
-      <div
-        id="dashboard-recent-transactions-card"
-        className="bg-white p-5 sm:p-6 rounded-2xl border border-slate-200/90 shadow-xs space-y-4"
-      >
-        <div className="flex items-center justify-between">
+      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Layers className="w-4 h-4 text-slate-700" />
-            <h3 className="text-base font-black text-slate-900 tracking-tight">
-              Son İşlemler & Sınıflandırma
+            <Layers className="w-5 h-5 text-slate-700" />
+            <h3 className="text-lg font-black text-slate-900 tracking-tight">
+              Son İşlemler
             </h3>
           </div>
           <button
             id="dash-view-all-expenses-btn"
             onClick={() => onSelectTab('expenses')}
-            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer"
+            className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 transition"
           >
             <span>Tümünü Gör</span>
             <ChevronRight className="w-3.5 h-3.5" />
@@ -767,15 +679,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {recentExpenses.length === 0 ? (
-          <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200">
-            <p className="text-xs font-bold text-slate-700">Bu ay henüz harcama kaydı yok.</p>
-            <p className="text-[11px] text-slate-500 mt-0.5">
+          <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300">
+            <p className="text-sm font-bold text-slate-700">Bu ay henüz harcama yok</p>
+            <p className="text-xs text-slate-500 mt-1">
               Harcamalarını veya borç ödemelerini anında kaydedebilirsin.
             </p>
             <button
               id="dash-add-first-expense-btn"
               onClick={onOpenQuickExpense}
-              className="mt-3 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition cursor-pointer"
+              className="mt-3 px-3.5 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition"
             >
               + Harcama Ekle
             </button>
@@ -790,36 +702,35 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               return (
                 <div
                   key={exp.id}
-                  className="p-3.5 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between gap-3"
+                  className="p-3.5 rounded-lg border border-slate-200 bg-slate-50/50 hover:bg-slate-50 transition flex items-center justify-between gap-3"
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-white text-xs font-bold shadow-2xs shrink-0"
+                      className="w-10 h-10 rounded-lg flex items-center justify-center text-white text-sm font-bold shadow-sm"
                       style={{ backgroundColor: color }}
                     >
-                      {label.slice(0, 1)}
+                      {label.slice(0, 1).toUpperCase()}
                     </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-bold text-xs sm:text-sm text-slate-900">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="font-semibold text-sm text-slate-900 truncate">
                           {exp.note || label}
                         </span>
-                        {/* Transaction classification badge */}
                         <span
-                          className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${badge.bg} ${badge.text} ${badge.border}`}
+                          className={`text-[10px] font-bold px-2 py-0.5 rounded border ${badge.bg} ${badge.text} ${badge.border} shrink-0`}
                         >
                           {badge.label}
                         </span>
                       </div>
 
-                      <div className="text-[11px] text-slate-500 flex flex-wrap items-center gap-1.5 mt-0.5">
+                      <div className="text-xs text-slate-500 flex flex-wrap items-center gap-1.5">
                         <span>{label}</span>
                         <span>•</span>
                         <span>{formatShortDate(exp.date)}</span>
                         {exp.paymentSourceName && (
                           <>
                             <span>•</span>
-                            <span className="truncate max-w-[140px]">
+                            <span className="truncate max-w-[120px]">
                               {exp.paymentSourceName}
                             </span>
                           </>
@@ -828,17 +739,17 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                     </div>
                   </div>
 
-                  <div className="text-right shrink-0">
-                    <div className="font-black text-xs sm:text-sm text-slate-900">
-                      -{formatCurrency(exp.amount)}
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-black text-sm text-slate-900">
+                      −{formatCurrency(exp.amount)}
                     </div>
                     {exp.isDebtPayment ? (
-                      <span className="text-[10px] text-purple-700 font-bold block">
+                      <span className="text-[10px] text-purple-700 font-bold block mt-0.5">
                         Borç Düşüldü
                       </span>
                     ) : (
-                      <span className="text-[10px] text-slate-400 font-medium block">
-                        Tüketim
+                      <span className="text-[10px] text-slate-500 font-medium block mt-0.5">
+                        Harcama
                       </span>
                     )}
                   </div>
@@ -850,39 +761,36 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* 9. AI COACH TEASER BANNER */}
+      {/* 8. AI COACH TEASER BANNER */}
       {/* ========================================================================= */}
-      <div
-        id="dash-ai-coach-banner"
-        className="bg-emerald-950 text-white p-5 sm:p-6 rounded-2xl border border-emerald-800/80 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4"
-      >
-        <div className="flex items-start gap-3.5">
-          <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-xs">
-            <Sparkles className="w-5 h-5" />
+      <div className="bg-gradient-to-br from-emerald-900 to-emerald-950 text-white p-6 rounded-2xl border border-emerald-800 shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className="w-12 h-12 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shrink-0 shadow-md">
+            <Sparkles className="w-6 h-6" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h4 className="text-sm font-black text-white">CEBİ Yapay Zeka Finans Koçu</h4>
+            <div className="flex items-center gap-2 mb-1">
+              <h4 className="text-base font-black text-white">CEBİ Yapay Zeka Koçu</h4>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-800 text-emerald-200">
-                Kişiselleştirilmiş Öneri
+                Kişiselleştirilmiş
               </span>
             </div>
-            <p className="text-xs text-emerald-100/90 mt-1 leading-relaxed max-w-2xl">
+            <p className="text-sm text-emerald-100 leading-relaxed max-w-2xl">
               {snapshot.hasCashShortfall
-                ? `Mevcut nakit açığın (-${formatCurrency(snapshot.cashShortfall)}) için borç önceliklendirme ve erteleme tavsiyeleri hazır.`
+                ? `Nakit açığın (-${formatCurrency(snapshot.cashShortfall)}) için borç önceliklendirme tavsiyeleri hazır.`
                 : snapshot.isOverBudget
-                ? `Bütçe açığını kapatmak ve kalan günleri güvenle tamamlamak için stratejiler hazır.`
-                : `Bugünkü ${formatCurrency(snapshot.dailySafeSpending)} güvenli harcama limitine göre tasarruf ve birikim önerileri hazır.`}
+                ? `Bütçe açığını kapatmak için stratejiler sunabilirim.`
+                : `${formatCurrency(snapshot.dailySafeSpending)} güvenli harcama limitine göre tasarruf önerileri hazır.`}
             </p>
           </div>
         </div>
 
         <button
           onClick={() => onSelectTab('coach')}
-          className="px-4 py-2.5 rounded-xl bg-white hover:bg-emerald-50 text-slate-900 text-xs font-bold transition flex items-center justify-center gap-2 cursor-pointer shrink-0 shadow-xs"
+          className="px-4 py-2.5 rounded-lg bg-white hover:bg-emerald-50 text-slate-900 text-sm font-bold transition flex items-center justify-center gap-2 cursor-pointer shadow-lg hover:shadow-xl shrink-0"
         >
           <span>Koç ile Konuş</span>
-          <ArrowUpRight className="w-3.5 h-3.5 text-slate-700" />
+          <ArrowUpRight className="w-4 h-4" />
         </button>
       </div>
     </div>
