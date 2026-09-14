@@ -256,13 +256,15 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
       {/* SECTION 2: INCOMES */}
       <div className="space-y-4 pt-4 border-t border-slate-200">
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs">
+        <div className="relative overflow-hidden rounded-3xl bg-white p-6 sm:p-7 border border-slate-200 shadow-sm">
 
           <div>
 
             <div className="flex items-center gap-2">
 
-              <TrendingUp className="w-5 h-5 text-blue-600" />
+              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 ring-1 ring-emerald-100">
+  <TrendingUp className="w-5 h-5 text-emerald-600" />
+</div>
 
               <h2 className="text-xl font-black text-slate-900 tracking-tight">
                 Düzenli ve Ek Gelirler
