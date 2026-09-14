@@ -14,7 +14,7 @@ import {
 import {
   exportDataAsJSON,
   importDataFromJSON,
-} from '../services/storageService';
+} from './storageService';
 
 interface SettingsModalProps {
   isOpen: boolean;
