@@ -26,7 +26,7 @@ import {
 import {
   buildFinancialSnapshot,
   processRecurringIncomeDeposits,
-} from './utils/financialCalculations';
+} from './financialCalculations';
 import { Navbar, NavTab } from './components/Navbar';
 import { DashboardView } from './components/DashboardView';
 import { ExpensesView } from './components/ExpensesView';
