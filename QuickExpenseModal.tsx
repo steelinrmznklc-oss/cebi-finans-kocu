@@ -23,7 +23,7 @@ import {
   BankAccount,
   CreditCard,
 } from '../types/finance';
-import { EXPENSE_CATEGORY_LABELS, EXPENSE_CATEGORY_COLORS } from '../utils/financialCalculations';
+import { EXPENSE_CATEGORY_LABELS, EXPENSE_CATEGORY_COLORS } from './financialCalculations';
 
 interface QuickExpenseModalProps {
   isOpen: boolean;
