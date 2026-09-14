@@ -18,13 +18,13 @@ import {
   FinancialSnapshot,
   ScheduledPayment,
   DebtDetailItem,
-} from '../types/finance';
+} from './finance';
 import {
   formatCurrency,
   formatTurkishDate,
   formatShortDate,
   getRelativeDaysInfo,
-} from '../utils/financialCalculations';
+} from './financialCalculations';
 
 interface CalendarViewProps {
   snapshot: FinancialSnapshot;
