@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useMemo } from 'react';
+
 import {
   AppData,
   Expense,
@@ -15,7 +16,8 @@ import {
   Income,
   ScheduledPayment,
   CoachMessage,
-} from './types/finance';
+} from './finance';
+
 import {
   loadAppData,
   saveAppData,
@@ -23,21 +25,23 @@ import {
   getCleanEmptyData,
   getSimulationScenarioData,
 } from './storageService';
+
 import {
   buildFinancialSnapshot,
   processRecurringIncomeDeposits,
 } from './financialCalculations';
-import { Navbar, NavTab } from './components/Navbar';
-import { DashboardView } from './components/DashboardView';
-import { ExpensesView } from './components/ExpensesView';
-import { DebtsView } from './components/DebtsView';
-import { AccountsView } from './components/AccountsView';
-import { CalendarView } from './components/CalendarView';
-import { ReportsView } from './components/ReportsView';
-import { CoachView } from './components/CoachView';
-import { QuickExpenseModal } from './components/QuickExpenseModal';
-import { OnboardingModal } from './components/OnboardingModal';
-import { SettingsModal } from './components/SettingsModal';
+
+import { Navbar, NavTab } from './Navbar';
+import { DashboardView } from './DashboardView';
+import { ExpensesView } from './ExpensesView';
+import { DebtsView } from './DebtsView';
+import { AccountsView } from './AccountsView';
+import { CalendarView } from './CalendarView';
+import { ReportsView } from './ReportsView';
+import { CoachView } from './CoachView';
+import { QuickExpenseModal } from './QuickExpenseModal';
+import { OnboardingModal } from './OnboardingModal';
+import { SettingsModal } from './SettingsModal';
 
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => {
