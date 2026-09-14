@@ -22,7 +22,7 @@ import {
   getInitialDemoData,
   getCleanEmptyData,
   getSimulationScenarioData,
-} from './services/storageService';
+} from '.storageService';
 import {
   buildFinancialSnapshot,
   processRecurringIncomeDeposits,
