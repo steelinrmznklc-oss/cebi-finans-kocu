@@ -74,9 +74,13 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title="CEBİ - Kişisel Finans Koçu"
               >
                 {/* Logo Image */}
-                <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-600 to-emerald-700 flex items-center justify-center text-white font-black text-lg shadow-sm">
-                  C
-                </div>
+                <div className="w-10 h-10 flex items-center justify-center overflow-hidden rounded-xl bg-white">
+  <img
+    src="/cebi-icon.png"
+    alt="CEBİ"
+    className="w-full h-full object-contain"
+  />
+</div>
                 
                 <div className="hidden sm:flex flex-col">
                   <span className="text-base font-black text-slate-900 tracking-tight leading-none">
