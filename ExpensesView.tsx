@@ -18,14 +18,14 @@ import {
   ExpenseCategory,
   BankAccount,
   CreditCard as CreditCardType,
-} from '../types/finance';
+} from './finance';
 import {
   formatCurrency,
   formatTurkishDate,
   formatShortDate,
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_COLORS,
-} from '../utils/financialCalculations';
+} from './financialCalculations';
 import { getTransactionBadge } from './DashboardView';
 
 interface ExpensesViewProps {
