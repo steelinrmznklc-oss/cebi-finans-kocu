@@ -14,7 +14,7 @@ import {
   FinancialSnapshot,
   Expense,
   ExpenseCategory,
-} from '../types/finance';
+} from './finance';
 import {
   formatCurrency,
   formatTurkishMonth,
@@ -22,7 +22,7 @@ import {
   calculateCategoryBreakdown,
   EXPENSE_CATEGORY_LABELS,
   EXPENSE_CATEGORY_COLORS,
-} from '../utils/financialCalculations';
+} from './financialCalculations';
 
 interface ReportsViewProps {
   snapshot: FinancialSnapshot;
