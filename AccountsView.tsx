@@ -191,16 +191,16 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             {accounts.map((acc) => (
               <div
                 key={acc.id}
-                className="bg-white p-5 rounded-2xl border border-slate-200/90 shadow-xs hover:border-slate-300 transition flex flex-col justify-between gap-4"
+                className="group relative overflow-hidden bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg transition-all duration-200 flex flex-col justify-between gap-4"
               >
 
                 <div>
                   <div className="flex items-start justify-between">
 
                     <div>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider bg-slate-100 text-slate-700">
-                        {acc.accountType}
-                      </span>
+                      <span className="inline-flex items-center rounded-lg bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 ring-1 ring-emerald-100">
+  {acc.accountType}
+</span>
 
                       <h3 className="font-extrabold text-slate-900 text-base mt-2">
                         {acc.bankName}
