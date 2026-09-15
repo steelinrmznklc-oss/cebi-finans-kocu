@@ -509,17 +509,42 @@ export default function App() {
     }));
   };
 
-  const handleAddIncome = (inc: Omit<Income, 'id' | 'createdAt'>) => {
-    const newIncome: Income = {
-      ...inc,
-      id: `inc-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    };
-    setAppData((prev) => ({
-      ...prev,
-      incomes: [...prev.incomes, newIncome],
-    }));
+const handleAddIncome = (
+  inc: Omit<Income, 'id' | 'createdAt'>
+) => {
+  const newIncome: Income = {
+    ...inc,
+    id: `inc-${Date.now()}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
+
+  setAppData((prev) => {
+    let updatedAccounts = prev.accounts;
+
+    // Gelirin yatırılacağı hesap belirtilmişse
+    // banka bakiyesini artır.
+    if (inc.targetAccountId) {
+      updatedAccounts = prev.accounts.map((account) => {
+        if (account.id !== inc.targetAccountId) {
+          return account;
+        }
+
+        return {
+          ...account,
+          balance: account.balance + inc.amount,
+          updatedAt: new Date().toISOString(),
+        };
+      });
+    }
+
+    return {
+      ...prev,
+      accounts: updatedAccounts,
+      incomes: [...prev.incomes, newIncome],
+    };
+  });
+};
 
   const handleUpdateIncome = (id: string, updated: Partial<Income>) => {
     setAppData((prev) => ({
