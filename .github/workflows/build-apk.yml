@@ -1,6 +1,9 @@
 name: Build CEBİ APK
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
@@ -13,39 +16,31 @@ jobs:
         with:
           ref: android-apk
 
-      - name: Node.js kurulumu
+      - name: Node.js Kurulumu
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: npm
+          node-version: 18
 
-      - name: Bağımlılıkları kur
-        run: npm install
+      - name: Bağımlılıkları Yükle
+        run: npm ci
 
-      - name: Web uygulamasını oluştur
-        run: npx vite build --base=./
+      - name: Capacitor / Web Build Al
+        run: npm run build
 
-      - name: Capacitor Android projesini oluştur
-        run: npx cap add android
-
-      - name: Web dosyalarını Android'e aktar
-        run: npx cap sync android
-
-      - name: Java kurulumu
+      - name: Java JDK Kurulumu
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: '21'
+          distribution: 'zulu'
+          java-version: '17'
 
-      - name: Android SDK kurulumu
-        uses: android-actions/setup-android@v3
+      - name: Android APK Derle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
 
-      - name: APK oluştur
-        working-directory: android
-        run: ./gradlew assembleDebug
-
-      - name: APK'yı yükle
+      - name: APK Dosyasını Yükle (Artifact)
         uses: actions/upload-artifact@v4
         with:
-          name: cebi-apk
+          name: cebi-release-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
