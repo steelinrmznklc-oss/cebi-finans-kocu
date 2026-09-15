@@ -19,27 +19,40 @@ jobs:
       - name: Node.js Kurulumu
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
+          cache: npm
 
       - name: Bağımlılıkları Yükle
         run: npm install --include=optional
 
-      - name: Capacitor / Web Build Al
-        run: npm run build
+      - name: Tailwind Linux native modülünü garanti et
+        run: npm install @tailwindcss/oxide-linux-x64-gnu --save-dev
+
+      - name: Web uygulamasını oluştur
+        run: npx vite build --base=./
+
+      - name: Capacitor Android projesini oluştur
+        run: npx cap add android
+
+      - name: Web dosyalarını Android'e aktar
+        run: npx cap sync android
 
       - name: Java JDK Kurulumu
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '17'
+          distribution: temurin
+          java-version: '21'
+
+      - name: Android SDK Kurulumu
+        uses: android-actions/setup-android@v3
 
       - name: Android APK Derle
+        working-directory: android
         run: |
-          cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: APK Dosyasını Yükle (Artifact)
+      - name: APK Dosyasını Yükle
         uses: actions/upload-artifact@v4
         with:
           name: cebi-release-apk
