@@ -21,6 +21,20 @@
       ]
     },
     "allowImportingTsExtensions": true,
-    "noEmit": true
-  }
+    "noEmit": true,
+    "types": [
+      "vite/client"
+    ]
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx"
+  ],
+  "exclude": [
+    "node_modules",
+    "android",
+    "run_consistency_audit.ts",
+    "run_final_cash_validation.ts",
+    "run_financial_simulation.ts"
+  ]
 }
