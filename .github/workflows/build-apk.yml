@@ -1,4 +1,9 @@
-- name: Android APK branch'ini indir
+- name: Build CEBİ APK
   uses: actions/checkout@v4
   with:
     ref: android-apk
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
