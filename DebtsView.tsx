@@ -1467,17 +1467,14 @@ export function DebtsView({
                     }
                     className={inputClass}
                   >
-                    {accounts.map((account) => (
-                      <option
-                        key={account.id}
-                        value={account.id}
-                      >
-                        {account.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+{accounts.map((account) => (
+  <option
+    key={account.id}
+    value={account.id}
+  >
+    {account.bankName} - {account.accountName}
+  </option>
+))}
 
               <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
                 <button
