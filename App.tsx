@@ -623,7 +623,7 @@ export default function App() {
         }
       );
 
-           if (!response.ok) {
+            if (!response.ok) {
         throw new Error(`Server returned ${response.status}`);
       }
 
@@ -662,7 +662,8 @@ export default function App() {
           'diger',
         ] as const;
 
-        type ValidExpenseCategory = (typeof validCategories)[number];
+        type ValidExpenseCategory =
+          (typeof validCategories)[number];
 
         const categoryCandidate = String(
           args.category || 'diger'
@@ -692,7 +693,8 @@ export default function App() {
 
         if (args.paymentSourceType === 'bank_account') {
           const account = appData.accounts.find(
-            (acc) => acc.id === String(args.paymentSourceId)
+            (acc) =>
+              acc.id === String(args.paymentSourceId)
           );
 
           if (!account) {
@@ -711,9 +713,12 @@ export default function App() {
         // KREDİ KARTI
         // ------------------------------------------
 
-        else if (args.paymentSourceType === 'credit_card') {
+        else if (
+          args.paymentSourceType === 'credit_card'
+        ) {
           const card = appData.creditCards.find(
-            (c) => c.id === String(args.paymentSourceId)
+            (c) =>
+              c.id === String(args.paymentSourceId)
           );
 
           if (!card) {
@@ -752,16 +757,19 @@ export default function App() {
         }
 
         const expenseDate =
-          typeof args.date === 'string' && args.date.trim()
+          typeof args.date === 'string' &&
+          args.date.trim()
             ? args.date.trim()
-            : new Date().toISOString().slice(0, 10);
+            : new Date()
+                .toISOString()
+                .slice(0, 10);
 
         const note =
-          typeof args.note === 'string' && args.note.trim()
+          typeof args.note === 'string' &&
+          args.note.trim()
             ? args.note.trim()
             : `CEBİ AI: ${cleanText}`;
 
-        // Mevcut CEBİ finans motorunu çalıştır.
         handleAddExpense({
           amount,
           category,
@@ -816,19 +824,397 @@ export default function App() {
           throw new Error('Geçersiz gelir tutarı.');
         }
 
+        // ------------------------------------------
+        // GELİR KATEGORİSİ
+        // ------------------------------------------
+
+        const validIncomeCategories = [
+          'maas',
+          'avans',
+          'freelance',
+          'ticari',
+          'kira',
+          'diger',
+        ] as const;
+
+        type ValidIncomeCategory =
+          (typeof validIncomeCategories)[number];
+
+        const categoryCandidate = String(
+          args.category || 'diger'
+        )
+          .trim()
+          .toLowerCase();
+
+        const category: ValidIncomeCategory =
+          validIncomeCategories.includes(
+            categoryCandidate as ValidIncomeCategory
+          )
+            ? (categoryCandidate as ValidIncomeCategory)
+            : 'diger';
+
+        // ------------------------------------------
+        // GELİR ADI
+        // ------------------------------------------
+
+        const incomeName =
+          typeof args.name === 'string' &&
+          args.name.trim()
+            ? args.name.trim()
+            : 'AI Geliri';
+
+        // ------------------------------------------
+        // HEDEF BANKA HESABI
+        // ------------------------------------------
+
         const targetAccountId =
           typeof args.targetAccountId === 'string'
             ? args.targetAccountId.trim()
             : '';
 
-        if (!targetAccountId) {
+        let targetAccountName = 'Banka hesabı';
+
+        if (targetAccountId) {
+          const account = appData.accounts.find(
+            (acc) => acc.id === targetAccountId
+          );
+
+          if (!account) {
+            throw new Error(
+              'AI gelir hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
+            );
+          }
+
+          targetAccountName =
+            `${account.bankName} - ${account.accountName}`;
+        }
+
+        // ------------------------------------------
+        // TEKRARLAMA BİLGİSİ
+        // ------------------------------------------
+
+        const frequencyValues = [
+          'monthly',
+          'one_time',
+          'biweekly',
+          'weekly',
+        ] as const;
+
+        type ValidIncomeFrequency =
+          (typeof frequencyValues)[number];
+
+        const frequencyCandidate = String(
+          args.frequency || 'one_time'
+        )
+          .trim()
+          .toLowerCase();
+
+        const frequency: ValidIncomeFrequency =
+          frequencyValues.includes(
+            frequencyCandidate as ValidIncomeFrequency
+          )
+            ? (frequencyCandidate as ValidIncomeFrequency)
+            : 'one_time';
+
+        const isRecurring =
+          typeof args.isRecurring === 'boolean'
+            ? args.isRecurring
+            : frequency !== 'one_time';
+
+        // ------------------------------------------
+        // TARİH
+        // ------------------------------------------
+
+        const paymentDate =
+          typeof args.paymentDate === 'string' &&
+          args.paymentDate.trim()
+            ? args.paymentDate.trim()
+            : new Date()
+                .toISOString()
+                .slice(0, 10);
+
+        // ------------------------------------------
+        // AYIN GÜNÜ
+        // ------------------------------------------
+
+        let dayOfMonth: number | undefined;
+
+        if (
+          args.dayOfMonth !== undefined &&
+          args.dayOfMonth !== null
+        ) {
+          const parsedDay = Number(args.dayOfMonth);
+
+          if (
+            Number.isInteger(parsedDay) &&
+            parsedDay >= 1 &&
+            parsedDay <= 31
+          ) {
+            dayOfMonth = parsedDay;
+          }
+        }
+
+        // Tarihten gün çıkarılabiliyorsa kullan.
+        if (
+          dayOfMonth === undefined &&
+          paymentDate
+        ) {
+          const parsedDate = new Date(
+            `${paymentDate}T00:00:00`
+          );
+
+          if (!Number.isNaN(parsedDate.getTime())) {
+            dayOfMonth = parsedDate.getDate();
+          }
+        }
+
+        // ------------------------------------------
+        // MEVCUT CEBİ GELİR MOTORU
+        // ------------------------------------------
+
+        handleAddIncome({
+          name: incomeName,
+          amount,
+          frequency,
+          dayOfMonth,
+          category,
+          paymentDate,
+          isRecurring,
+          targetAccountId:
+            targetAccountId || undefined,
+          processedMonths: [],
+        });
+
+        const formattedAmount =
+          amount.toLocaleString('tr-TR');
+
+        const frequencyText =
+          frequency === 'monthly'
+            ? 'aylık'
+            : frequency === 'weekly'
+              ? 'haftalık'
+              : frequency === 'biweekly'
+                ? 'iki haftada bir'
+                : 'tek seferlik';
+
+        const confirmationMessage =
+          `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${targetAccountName} hesabına ${frequencyText} olarak kaydettim.`;
+
+        const coachMsg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: confirmationMessage,
+          timestamp: new Date().toISOString(),
+        };
+
+        setAppData((prev) => ({
+          ...prev,
+          coachMessages: [
+            ...prev.coachMessages,
+            coachMsg,
+          ],
+        }));
+
+        return;
+      }
+
+      // =====================================================
+      // BORÇ ÖDEME ACTION
+      // =====================================================
+
+      if (action?.name === 'make_debt_payment') {
+        const args = action.args || {};
+
+        const amount = Number(args.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
           throw new Error(
-            'AI gelir için banka hesabı seçemedi.'
+            'Geçersiz borç ödeme tutarı.'
           );
         }
 
-        const account = appData.accounts.find(
-          (acc) => acc.id === targetAccountId
+        const debtType = String(
+          args.debtType || ''
+        )
+          .trim()
+          .toLowerCase();
+
+        const debtId = String(
+          args.debtId || ''
+        ).trim();
+
+        if (!debtId) {
+          throw new Error(
+            'AI borç ödeme için borç seçemedi.'
+          );
+        }
+
+        // ------------------------------------------
+        // ÖDEME YAPILACAK BANKA HESABI
+        // ------------------------------------------
+
+        let bankAccountId = String(
+          args.bankAccountId || ''
+        ).trim();
+
+        if (!bankAccountId) {
+          bankAccountId =
+            appData.accounts[0]?.id || '';
+        }
+
+        if (!bankAccountId) {
+          throw new Error(
+            'Borç ödemesi için CEBİ içinde banka hesabı bulunamadı.'
+          );
+        }
+
+        const bankAccount = appData.accounts.find(
+          (acc) => acc.id === bankAccountId
+        );
+
+        if (!bankAccount) {
+          throw new Error(
+            'AI borç ödemesi için seçtiği banka hesabı CEBİ içinde bulunamadı.'
+          );
+        }
+
+        // ------------------------------------------
+        // BORÇ ADINI BUL
+        // ------------------------------------------
+
+        let debtName = 'Borç';
+
+        if (debtType === 'card') {
+          const card = appData.creditCards.find(
+            (c) => c.id === debtId
+          );
+
+          if (!card) {
+            throw new Error(
+              'AI bir kredi kartı borcu seçti fakat bu kart CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName =
+            `${card.bank} - ${card.cardName}`;
+        }
+
+        else if (debtType === 'loan') {
+          const loan = appData.loans.find(
+            (l) => l.id === debtId
+          );
+
+          if (!loan) {
+            throw new Error(
+              'AI bir kredi borcu seçti fakat bu borç CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName =
+            `${loan.bank} - ${loan.loanName}`;
+        }
+
+        else if (debtType === 'kmh') {
+          const overdraft =
+            appData.overdrafts.find(
+              (o) => o.id === debtId
+            );
+
+          if (!overdraft) {
+            throw new Error(
+              'AI bir KMH borcu seçti fakat bu borç CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName =
+            overdraft.accountName
+              ? `${overdraft.bank} - ${overdraft.accountName}`
+              : `${overdraft.bank} - KMH`;
+        }
+
+        else if (debtType === 'other') {
+          const otherDebt =
+            appData.otherDebts.find(
+              (d) => d.id === debtId
+            );
+
+          if (!otherDebt) {
+            throw new Error(
+              'AI bir diğer borç seçti fakat bu borç CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName = otherDebt.debtName;
+        }
+
+        else {
+          throw new Error(
+            'AI geçersiz bir borç türü gönderdi.'
+          );
+        }
+
+        // ------------------------------------------
+        // MEVCUT CEBİ BORÇ ÖDEME MOTORU
+        // ------------------------------------------
+
+        handleMakeDebtPayment({
+          debtType: debtType as
+            | 'card'
+            | 'loan'
+            | 'kmh'
+            | 'other',
+          debtId,
+          amount,
+          bankAccountId,
+        });
+
+        const formattedAmount =
+          amount.toLocaleString('tr-TR');
+
+        const confirmationMessage =
+          `✅ ${formattedAmount} ₺ ${debtName} borcunu ${bankAccount.bankName} - ${bankAccount.accountName} hesabından ödedim.`;
+
+        const coachMsg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: confirmationMessage,
+          timestamp: new Date().toISOString(),
+        };
+
+        setAppData((prev) => ({
+          ...prev,
+          coachMessages: [
+            ...prev.coachMessages,
+            coachMsg,
+          ],
+        }));
+
+        return;
+      }
+
+      // =====================================================
+      // NORMAL GEMINI CEVABI
+      // =====================================================
+
+      const aiReply =
+        result?.reply ||
+        result?.answer ||
+        'İşlemi anlayamadım. Biraz daha açık anlatır mısın?';
+
+      const coachMsg: CoachMessage = {
+        id: `msg-coach-${Date.now()}`,
+        sender: 'coach',
+        text: aiReply,
+        timestamp: new Date().toISOString(),
+      };
+
+      setAppData((prev) => ({
+        ...prev,
+        coachMessages: [
+          ...prev.coachMessages,
+          coachMsg,
+        ],
+      }));
         );
 
         if (!account) {
