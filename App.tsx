@@ -619,8 +619,6 @@ const handleAddIncome = (
     setIsCoachLoading(true);
 
     try {
-      // Backend'e CEBİ'nin finansal kaynaklarını da gönderiyoruz.
-      // Gemini bu ID'leri kullanarak doğru hesap/kart/borcu seçebilir.
       const response = await fetch(
         `${import.meta.env.VITE_API_URL || ''}/api/coach`,
         {
@@ -631,15 +629,12 @@ const handleAddIncome = (
           body: JSON.stringify({
             question: cleanText,
             message: cleanText,
-
             snapshot,
-
             accounts: appData.accounts,
             creditCards: appData.creditCards,
             loans: appData.loans,
             overdrafts: appData.overdrafts,
             otherDebts: appData.otherDebts,
-
             history: updatedMessages.slice(-8).map((m) => ({
               role: m.sender === 'user' ? 'user' : 'model',
               text: m.text,
@@ -648,25 +643,19 @@ const handleAddIncome = (
         }
       );
 
-            if (!response.ok) {
+      if (!response.ok) {
         throw new Error(`Server returned ${response.status}`);
       }
 
       const result = await response.json();
-
-      // =====================================================
-      // GEMINI ACTION ENGINE
-      // =====================================================
-
       const action = result?.action;
 
       // =====================================================
-      // HARCAMA EKLEME ACTION
+      // HARCAMA EKLEME
       // =====================================================
 
       if (action?.name === 'add_expense') {
         const args = action.args || {};
-
         const amount = Number(args.amount);
 
         if (!Number.isFinite(amount) || amount <= 0) {
@@ -712,14 +701,9 @@ const handleAddIncome = (
           | 'nakit'
           | 'diger' = 'diger';
 
-        // ------------------------------------------
-        // BANKA HESABI
-        // ------------------------------------------
-
         if (args.paymentSourceType === 'bank_account') {
           const account = appData.accounts.find(
-            (acc) =>
-              acc.id === String(args.paymentSourceId)
+            (acc) => acc.id === String(args.paymentSourceId)
           );
 
           if (!account) {
@@ -732,18 +716,11 @@ const handleAddIncome = (
           paymentSourceId = account.id;
           paymentSourceName =
             `${account.bankName} - ${account.accountName}`;
-        }
-
-        // ------------------------------------------
-        // KREDİ KARTI
-        // ------------------------------------------
-
-        else if (
+        } else if (
           args.paymentSourceType === 'credit_card'
         ) {
           const card = appData.creditCards.find(
-            (c) =>
-              c.id === String(args.paymentSourceId)
+            (c) => c.id === String(args.paymentSourceId)
           );
 
           if (!card) {
@@ -756,28 +733,14 @@ const handleAddIncome = (
           paymentSourceId = card.id;
           paymentSourceName =
             `${card.bank} - ${card.cardName}`;
-        }
-
-        // ------------------------------------------
-        // NAKİT
-        // ------------------------------------------
-
-        else if (
+        } else if (
           args.paymentSourceType === 'cash' ||
           args.paymentSourceType === 'nakit'
         ) {
           paymentSourceType = 'nakit';
-          paymentSourceId = undefined;
           paymentSourceName = 'Nakit';
-        }
-
-        // ------------------------------------------
-        // DİĞER
-        // ------------------------------------------
-
-        else {
+        } else {
           paymentSourceType = 'diger';
-          paymentSourceId = undefined;
           paymentSourceName = 'Diğer';
         }
 
@@ -785,9 +748,7 @@ const handleAddIncome = (
           typeof args.date === 'string' &&
           args.date.trim()
             ? args.date.trim()
-            : new Date()
-                .toISOString()
-                .slice(0, 10);
+            : new Date().toISOString().slice(0, 10);
 
         const note =
           typeof args.note === 'string' &&
@@ -810,11 +771,9 @@ const handleAddIncome = (
           amount.toLocaleString('tr-TR');
 
         const confirmationMessage =
-          paymentSourceName &&
           paymentSourceType === 'credit_card'
             ? `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName} üzerinden kaydettim. Kredi kartı borcunu ve kullanılabilir limitini güncelledim.`
-            : paymentSourceName &&
-                paymentSourceType === 'bank_account'
+            : paymentSourceType === 'bank_account'
               ? `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName} üzerinden kaydettim. Hesap bakiyeni güncelledim.`
               : `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName || 'Diğer'} olarak kaydettim.`;
 
@@ -837,21 +796,16 @@ const handleAddIncome = (
       }
 
       // =====================================================
-      // GELİR EKLEME ACTION
+      // GELİR EKLEME
       // =====================================================
 
       if (action?.name === 'add_income') {
         const args = action.args || {};
-
         const amount = Number(args.amount);
 
         if (!Number.isFinite(amount) || amount <= 0) {
           throw new Error('Geçersiz gelir tutarı.');
         }
-
-        // ------------------------------------------
-        // GELİR KATEGORİSİ
-        // ------------------------------------------
 
         const validIncomeCategories = [
           'maas',
@@ -878,45 +832,32 @@ const handleAddIncome = (
             ? (categoryCandidate as ValidIncomeCategory)
             : 'diger';
 
-        // ------------------------------------------
-        // GELİR ADI
-        // ------------------------------------------
-
         const incomeName =
           typeof args.name === 'string' &&
           args.name.trim()
             ? args.name.trim()
             : 'AI Geliri';
 
-        // ------------------------------------------
-        // HEDEF BANKA HESABI
-        // ------------------------------------------
-
         const targetAccountId =
           typeof args.targetAccountId === 'string'
             ? args.targetAccountId.trim()
             : '';
 
-        let targetAccountName = 'Banka hesabı';
-
-        if (targetAccountId) {
-          const account = appData.accounts.find(
-            (acc) => acc.id === targetAccountId
+        if (!targetAccountId) {
+          throw new Error(
+            'Gelirin yatırılacağı banka hesabı belirtilmedi.'
           );
-
-          if (!account) {
-            throw new Error(
-              'AI gelir hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
-            );
-          }
-
-          targetAccountName =
-            `${account.bankName} - ${account.accountName}`;
         }
 
-        // ------------------------------------------
-        // TEKRARLAMA BİLGİSİ
-        // ------------------------------------------
+        const account = appData.accounts.find(
+          (acc) => acc.id === targetAccountId
+        );
+
+        if (!account) {
+          throw new Error(
+            'AI gelir hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
+          );
+        }
 
         const frequencyValues = [
           'monthly',
@@ -946,21 +887,11 @@ const handleAddIncome = (
             ? args.isRecurring
             : frequency !== 'one_time';
 
-        // ------------------------------------------
-        // TARİH
-        // ------------------------------------------
-
         const paymentDate =
           typeof args.paymentDate === 'string' &&
           args.paymentDate.trim()
             ? args.paymentDate.trim()
-            : new Date()
-                .toISOString()
-                .slice(0, 10);
-
-        // ------------------------------------------
-        // AYIN GÜNÜ
-        // ------------------------------------------
+            : new Date().toISOString().slice(0, 10);
 
         let dayOfMonth: number | undefined;
 
@@ -979,10 +910,9 @@ const handleAddIncome = (
           }
         }
 
-        // Tarihten gün çıkarılabiliyorsa kullan.
         if (
           dayOfMonth === undefined &&
-          paymentDate
+          isRecurring
         ) {
           const parsedDate = new Date(
             `${paymentDate}T00:00:00`
@@ -993,10 +923,6 @@ const handleAddIncome = (
           }
         }
 
-        // ------------------------------------------
-        // MEVCUT CEBİ GELİR MOTORU
-        // ------------------------------------------
-
         handleAddIncome({
           name: incomeName,
           amount,
@@ -1005,8 +931,7 @@ const handleAddIncome = (
           category,
           paymentDate,
           isRecurring,
-          targetAccountId:
-            targetAccountId || undefined,
+          targetAccountId,
           processedMonths: [],
         });
 
@@ -1023,7 +948,7 @@ const handleAddIncome = (
                 : 'tek seferlik';
 
         const confirmationMessage =
-          `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${targetAccountName} hesabına ${frequencyText} olarak kaydettim.`;
+          `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${account.bankName} - ${account.accountName} hesabına ${frequencyText} olarak kaydettim.`;
 
         const coachMsg: CoachMessage = {
           id: `msg-coach-${Date.now()}`,
@@ -1044,12 +969,11 @@ const handleAddIncome = (
       }
 
       // =====================================================
-      // BORÇ ÖDEME ACTION
+      // BORÇ ÖDEME
       // =====================================================
 
       if (action?.name === 'make_debt_payment') {
         const args = action.args || {};
-
         const amount = Number(args.amount);
 
         if (!Number.isFinite(amount) || amount <= 0) {
@@ -1064,6 +988,16 @@ const handleAddIncome = (
           .trim()
           .toLowerCase();
 
+        if (
+          !['card', 'loan', 'kmh', 'other'].includes(
+            debtType
+          )
+        ) {
+          throw new Error(
+            'AI geçersiz bir borç türü gönderdi.'
+          );
+        }
+
         const debtId = String(
           args.debtId || ''
         ).trim();
@@ -1073,39 +1007,6 @@ const handleAddIncome = (
             'AI borç ödeme için borç seçemedi.'
           );
         }
-
-        // ------------------------------------------
-        // ÖDEME YAPILACAK BANKA HESABI
-        // ------------------------------------------
-
-        let bankAccountId = String(
-          args.bankAccountId || ''
-        ).trim();
-
-        if (!bankAccountId) {
-          bankAccountId =
-            appData.accounts[0]?.id || '';
-        }
-
-        if (!bankAccountId) {
-          throw new Error(
-            'Borç ödemesi için CEBİ içinde banka hesabı bulunamadı.'
-          );
-        }
-
-        const bankAccount = appData.accounts.find(
-          (acc) => acc.id === bankAccountId
-        );
-
-        if (!bankAccount) {
-          throw new Error(
-            'AI borç ödemesi için seçtiği banka hesabı CEBİ içinde bulunamadı.'
-          );
-        }
-
-        // ------------------------------------------
-        // BORÇ ADINI BUL
-        // ------------------------------------------
 
         let debtName = 'Borç';
 
@@ -1122,9 +1023,7 @@ const handleAddIncome = (
 
           debtName =
             `${card.bank} - ${card.cardName}`;
-        }
-
-        else if (debtType === 'loan') {
+        } else if (debtType === 'loan') {
           const loan = appData.loans.find(
             (l) => l.id === debtId
           );
@@ -1137,13 +1036,10 @@ const handleAddIncome = (
 
           debtName =
             `${loan.bank} - ${loan.loanName}`;
-        }
-
-        else if (debtType === 'kmh') {
-          const overdraft =
-            appData.overdrafts.find(
-              (o) => o.id === debtId
-            );
+        } else if (debtType === 'kmh') {
+          const overdraft = appData.overdrafts.find(
+            (o) => o.id === debtId
+          );
 
           if (!overdraft) {
             throw new Error(
@@ -1155,13 +1051,10 @@ const handleAddIncome = (
             overdraft.accountName
               ? `${overdraft.bank} - ${overdraft.accountName}`
               : `${overdraft.bank} - KMH`;
-        }
-
-        else if (debtType === 'other') {
-          const otherDebt =
-            appData.otherDebts.find(
-              (d) => d.id === debtId
-            );
+        } else {
+          const otherDebt = appData.otherDebts.find(
+            (d) => d.id === debtId
+          );
 
           if (!otherDebt) {
             throw new Error(
@@ -1172,184 +1065,10 @@ const handleAddIncome = (
           debtName = otherDebt.debtName;
         }
 
-        else {
-          throw new Error(
-            'AI geçersiz bir borç türü gönderdi.'
-          );
-        }
-
-        // ------------------------------------------
-        // MEVCUT CEBİ BORÇ ÖDEME MOTORU
-        // ------------------------------------------
-
-        handleMakeDebtPayment({
-          debtType: debtType as
-            | 'card'
-            | 'loan'
-            | 'kmh'
-            | 'other',
-          debtId,
-          amount,
-          bankAccountId,
-        });
-
-        const formattedAmount =
-          amount.toLocaleString('tr-TR');
-
-        const confirmationMessage =
-          `✅ ${formattedAmount} ₺ ${debtName} borcunu ${bankAccount.bankName} - ${bankAccount.accountName} hesabından ödedim.`;
-
-        const coachMsg: CoachMessage = {
-          id: `msg-coach-${Date.now()}`,
-          sender: 'coach',
-          text: confirmationMessage,
-          timestamp: new Date().toISOString(),
-        };
-
-        setAppData((prev) => ({
-          ...prev,
-          coachMessages: [
-            ...prev.coachMessages,
-            coachMsg,
-          ],
-        }));
-
-        return;
-      }
-
-      // =====================================================
-      // NORMAL GEMINI CEVABI
-      // =====================================================
-
-      const aiReply =
-        result?.reply ||
-        result?.answer ||
-        'İşlemi anlayamadım. Biraz daha açık anlatır mısın?';
-
-      const coachMsg: CoachMessage = {
-        id: `msg-coach-${Date.now()}`,
-        sender: 'coach',
-        text: aiReply,
-        timestamp: new Date().toISOString(),
-      };
-
-      setAppData((prev) => ({
-        ...prev,
-        coachMessages: [
-          ...prev.coachMessages,
-          coachMsg,
-        ],
-      }));
-
-        if (!account) {
-          throw new Error(
-            'AI gelir hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
-          );
-        }
-
-        const validIncomeCategories = [
-          'maas',
-          'avans',
-          'freelance',
-          'ticari',
-          'kira',
-          'diger',
-        ] as const;
-
-        const categoryCandidate = String(
-          args.category || 'diger'
-        )
-          .trim()
-          .toLowerCase();
-
-        const category = validIncomeCategories.includes(
-          categoryCandidate as (typeof validIncomeCategories)[number]
-        )
-          ? categoryCandidate
-          : 'diger';
-
-        const incomeDate =
-          typeof args.date === 'string' && args.date.trim()
-            ? args.date.trim()
-            : new Date().toISOString().slice(0, 10);
-
-        const incomeName =
-          typeof args.name === 'string' && args.name.trim()
-            ? args.name.trim()
-            : 'AI Geliri';
-
-        // Mevcut CEBİ gelir motorunu çalıştır.
-        handleAddIncome({
-          amount,
-          name: incomeName,
-          category: category as any,
-          date: incomeDate,
-          targetAccountId,
-        } as any);
-
-        const formattedAmount =
-          amount.toLocaleString('tr-TR');
-
-        const accountName =
-          `${account.bankName} - ${account.accountName}`;
-
-        const confirmationMessage =
-          `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${accountName} hesabına kaydettim.`;
-
-        const coachMsg: CoachMessage = {
-          id: `msg-coach-${Date.now()}`,
-          sender: 'coach',
-          text: confirmationMessage,
-          timestamp: new Date().toISOString(),
-        };
-
-        setAppData((prev) => ({
-          ...prev,
-          coachMessages: [
-            ...prev.coachMessages,
-            coachMsg,
-          ],
-        }));
-
-        return;
-      }
-
-      // =====================================================
-      // BORÇ ÖDEME ACTION
-      // =====================================================
-
-      if (action?.name === 'make_debt_payment') {
-        const args = action.args || {};
-
-        const amount = Number(args.amount);
-
-        if (!Number.isFinite(amount) || amount <= 0) {
-          throw new Error('Geçersiz borç ödeme tutarı.');
-        }
-
-        const debtType = String(
-          args.debtType || ''
-        ).toLowerCase();
-
-        const debtId = String(
-          args.debtId || ''
-        );
-
-        if (!debtId) {
-          throw new Error(
-            'AI borç ödeme için borç seçemedi.'
-          );
-        }
-
-        // ------------------------------------------
-        // ÖDEME YAPILACAK BANKA HESABI
-        // ------------------------------------------
-
         let bankAccountId = String(
           args.bankAccountId || ''
-        );
+        ).trim();
 
-        // Hesap belirtilmemişse ilk banka hesabını kullan.
         if (!bankAccountId) {
           bankAccountId =
             appData.accounts[0]?.id || '';
@@ -1367,107 +1086,31 @@ const handleAddIncome = (
 
         if (!bankAccount) {
           throw new Error(
-            'AI borç ödemesi için seçtiği banka hesabı CEBİ içinde bulunamadı.'
+            'AI ödeme hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
           );
         }
 
-        // ------------------------------------------
-        // BORÇ KAYNAĞINI BUL
-        // ------------------------------------------
-
-        let debtName = 'Borç';
-
-        if (debtType === 'card') {
-          const card = appData.creditCards.find(
-            (c) => c.id === debtId
-          );
-
-          if (!card) {
-            throw new Error(
-              'AI bir kredi kartı borcu seçti fakat bu kart CEBİ içinde bulunamadı.'
-            );
-          }
-
-          debtName = `${card.bank} - ${card.cardName}`;
-        }
-
-        else if (debtType === 'loan') {
-          const loan = appData.loans.find(
-            (l) => l.id === debtId
-          );
-
-          if (!loan) {
-            throw new Error(
-              'AI bir kredi/kredi borcu seçti fakat bu borç CEBİ içinde bulunamadı.'
-            );
-          }
-
-          debtName =
-            (loan as any).name ||
-            (loan as any).bankName ||
-            'Kredi';
-        }
-
-        else if (debtType === 'kmh') {
-          const overdraft = appData.overdrafts.find(
-            (o) => o.id === debtId
-          );
-
-          if (!overdraft) {
-            throw new Error(
-              'AI bir KMH borcu seçti fakat bu borç CEBİ içinde bulunamadı.'
-            );
-          }
-
-          debtName =
-            (overdraft as any).name ||
-            (overdraft as any).bankName ||
-            'KMH';
-        }
-
-        else if (debtType === 'other') {
-          const otherDebt = appData.otherDebts.find(
-            (d) => d.id === debtId
-          );
-
-          if (!otherDebt) {
-            throw new Error(
-              'AI bir diğer borç seçti fakat bu borç CEBİ içinde bulunamadı.'
-            );
-          }
-
-          debtName =
-            (otherDebt as any).name ||
-            'Diğer Borç';
-        }
-
-        else {
-          throw new Error(
-            'AI geçersiz bir borç türü gönderdi.'
-          );
-        }
-
-        // ------------------------------------------
-        // MEVCUT CEBİ BORÇ ÖDEME MOTORU
-        // ------------------------------------------
-
-        handleMakeDebtPayment({
-          debtType: debtType as any,
+        handleMakeDebtPayment(
+          debtType as
+            | 'card'
+            | 'loan'
+            | 'kmh'
+            | 'other',
           debtId,
           amount,
-          bankAccountId,
-        } as any);
+          bankAccountId
+        );
 
         const formattedAmount =
           amount.toLocaleString('tr-TR');
 
-        const confirmationMessage =
-          `✅ ${formattedAmount} ₺ ${debtName} borcunu ${bankAccount.bankName} - ${bankAccount.accountName} hesabından ödedim.`;
-
         const coachMsg: CoachMessage = {
           id: `msg-coach-${Date.now()}`,
           sender: 'coach',
-          text: confirmationMessage,
+          text:
+            `✅ ${formattedAmount} ₺ ${debtName} borcunu ` +
+            `${bankAccount.bankName} - ${bankAccount.accountName} ` +
+            `hesabından ödedim. Ödeme hesabındaki bakiyeyi ve ilgili borcu güncelledim.`,
           timestamp: new Date().toISOString(),
         };
 
@@ -1505,279 +1148,72 @@ const handleAddIncome = (
           coachMsg,
         ],
       }));
-
-  const validIncomeCategories = [
-    'maas',
-    'avans',
-    'freelance',
-    'ticari',
-    'kira',
-    'diger',
-  ] as const;
-
-  type ValidIncomeCategory = (typeof validIncomeCategories)[number];
-
-  const categoryCandidate = String(
-    args.category || 'diger'
-  ).toLowerCase();
-
-  const category: ValidIncomeCategory =
-    validIncomeCategories.includes(
-      categoryCandidate as ValidIncomeCategory
-    )
-      ? (categoryCandidate as ValidIncomeCategory)
-      : 'diger';
-
-  const incomeName =
-    typeof args.name === 'string' && args.name.trim()
-      ? args.name.trim()
-      : 'Gelir';
-
-  const incomeDate =
-    typeof args.date === 'string' && args.date.trim()
-      ? args.date
-      : new Date().toISOString().slice(0, 10);
-
-  handleAddIncome({
-    amount,
-    name: incomeName,
-    frequency: 'once',
-    dayOfMonth: new Date(incomeDate).getDate(),
-    category,
-    paymentDate: incomeDate,
-    isRecurring: false,
-  });
-
-  // Gerçekten hesaba yatan gelirse banka bakiyesini de artır.
-  setAppData((prev) => ({
-    ...prev,
-    accounts: prev.accounts.map((acc) =>
-      acc.id === account.id
-        ? {
-            ...acc,
-            balance: acc.balance + amount,
-            updatedAt: new Date().toISOString(),
-          }
-        : acc
-    ),
-  }));
-
-  const formattedAmount = amount.toLocaleString('tr-TR');
-
-  const coachMsg: CoachMessage = {
-    id: `msg-coach-${Date.now()}`,
-    sender: 'coach',
-    text: `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${account.bankName} - ${account.accountName} hesabına kaydettim. Hesap bakiyeni güncelledim.`,
-    timestamp: new Date().toISOString(),
-  };
-
-  setAppData((prev) => ({
-    ...prev,
-    coachMessages: [...prev.coachMessages, coachMsg],
-  }));
-
-  return;
-}
-      
-      if (action?.name === 'make_debt_payment') {
-        const args = action.args || {};
-
-        const amount = Number(args.amount);
-
-        if (!Number.isFinite(amount) || amount <= 0) {
-          throw new Error('Geçersiz borç ödeme tutarı.');
-        }
-
-        const debtType = String(args.debtType || '').toLowerCase();
-
-        const allowedDebtTypes = ['card', 'loan', 'kmh', 'other'];
-
-        if (!allowedDebtTypes.includes(debtType)) {
-          throw new Error('Geçersiz borç tipi.');
-        }
-
-        const debtId = String(args.debtId || '');
-
-        if (!debtId) {
-          throw new Error('Borç ID bilgisi eksik.');
-        }
-
-        let debtExists = false;
-
-        if (debtType === 'card') {
-          debtExists = appData.creditCards.some((c) => c.id === debtId);
-        } else if (debtType === 'loan') {
-          debtExists = appData.loans.some((l) => l.id === debtId);
-        } else if (debtType === 'kmh') {
-          debtExists = appData.overdrafts.some((k) => k.id === debtId);
-        } else if (debtType === 'other') {
-          debtExists = appData.otherDebts.some((d) => d.id === debtId);
-        }
-
-        if (!debtExists) {
-          throw new Error(
-            'AI bir borç seçti fakat bu borç CEBİ içinde bulunamadı.'
-          );
-        }
-
-        let bankAccountId: string | undefined;
-
-        if (args.bankAccountId) {
-          const account = appData.accounts.find(
-            (acc) => acc.id === String(args.bankAccountId)
-          );
-
-          if (!account) {
-            throw new Error(
-              'AI ödeme hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
-            );
-          }
-
-          bankAccountId = account.id;
-        } else {
-          // Kullanıcı özellikle hesap söylemediyse mevcut ilk banka hesabını kullan.
-          bankAccountId = appData.accounts[0]?.id;
-        }
-
-        if (!bankAccountId) {
-          throw new Error(
-            'Borç ödemesi için CEBİ içinde kayıtlı bir banka hesabı bulunamadı.'
-          );
-        }
-
-        handleMakeDebtPayment(
-          debtType as 'card' | 'loan' | 'kmh' | 'other',
-          debtId,
-          amount,
-          bankAccountId
-        );
-
-        const formattedAmount = amount.toLocaleString('tr-TR');
-
-        let debtName = 'borç';
-
-        if (debtType === 'card') {
-          const card = appData.creditCards.find((c) => c.id === debtId);
-          if (card) {
-            debtName = `${card.bank} ${card.cardName}`;
-          }
-        } else if (debtType === 'loan') {
-          const loan = appData.loans.find((l) => l.id === debtId);
-          if (loan) {
-            debtName = `${loan.bank} ${loan.loanName}`;
-          }
-        } else if (debtType === 'kmh') {
-          const kmh = appData.overdrafts.find((k) => k.id === debtId);
-          if (kmh) {
-            debtName = `${kmh.bank} KMH`;
-          }
-        } else if (debtType === 'other') {
-          const other = appData.otherDebts.find((d) => d.id === debtId);
-          if (other) {
-            debtName = other.debtName;
-          }
-        }
-
-        const coachMsg: CoachMessage = {
-          id: `msg-coach-${Date.now()}`,
-          sender: 'coach',
-          text: `✅ ${debtName} için ${formattedAmount} ₺ borç ödemesini kaydettim. Ödeme hesabındaki bakiyeyi ve ilgili borcu güncelledim.`,
-          timestamp: new Date().toISOString(),
-        };
-
-        setAppData((prev) => ({
-          ...prev,
-          coachMessages: [...prev.coachMessages, coachMsg],
-        }));
-
-        return;
-      }
-
-      // =====================================================
-      // NORMAL AI CEVABI
-      // =====================================================
-
-      const replyText =
-        result?.answer ||
-        result?.reply ||
-        'Cevap alınamadı.';
-
-      const coachMsg: CoachMessage = {
-        id: `msg-coach-${Date.now()}`,
-        sender: 'coach',
-        text: replyText,
-        timestamp: new Date().toISOString(),
-      };
-
-      setAppData((prev) => ({
-        ...prev,
-        coachMessages: [...prev.coachMessages, coachMsg],
-      }));
     } catch (err) {
       console.error(
         'Coach API call failed, using client-side smart fallback:',
         err
       );
 
-      // =====================================================
-      // CLIENT-SIDE FALLBACK
-      // =====================================================
-
       let fallbackText = '';
 
       if (snapshot.hasCashShortfall) {
-        fallbackText = `**Durumun:** Şu an hesaplarında ${snapshot.totalBalance.toLocaleString('tr-TR')} ₺ bulunurken, ay sonuna kadar ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ zorunlu ödeme yükümlülüğün var.
-
-**Dikkat etmen gereken:** Mevcut nakdinde ${snapshot.cashShortfall.toLocaleString('tr-TR')} ₺ açık bulunuyor. Bu nedenle bugünkü günlük güvenli harcama limitin **0 ₺**'dir.
-
-**Bugün için:** Beklenen gelirlerin fiilen hesabına geçene kadar zorunlu olmayan tüm nakit harcamalarını durdurmalısın.
-
-**Sonraki adım:** Gelirlerin yattığında planlanan günlük bütçen ${snapshot.plannedDailyBudget.toLocaleString('tr-TR')} ₺ / gün seviyesine gelecektir.`;
+        fallbackText =
+          `**Durumun:** Şu an hesaplarında ` +
+          `${snapshot.totalBalance.toLocaleString('tr-TR')} ₺ bulunurken, ` +
+          `ay sonuna kadar ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ ` +
+          `zorunlu ödeme yükümlülüğün var.\n\n` +
+          `**Dikkat etmen gereken:** Mevcut nakdinde ` +
+          `${snapshot.cashShortfall.toLocaleString('tr-TR')} ₺ açık bulunuyor. ` +
+          `Bu nedenle bugünkü günlük güvenli harcama limitin **0 ₺**'dir.\n\n` +
+          `**Bugün için:** Beklenen gelirlerin fiilen hesabına geçene kadar ` +
+          `zorunlu olmayan tüm nakit harcamalarını durdurmalısın.\n\n` +
+          `**Sonraki adım:** Gelirlerin yattığında planlanan günlük bütçen ` +
+          `${snapshot.plannedDailyBudget.toLocaleString('tr-TR')} ₺ / gün seviyesine gelecektir.`;
       } else if (
         cleanText.includes('5.000') ||
         cleanText.toLowerCase().includes('alışveriş')
       ) {
         fallbackText = snapshot.isOverBudget
-          ? `**Durumun:** Bu ay planlanan bütçeni ${snapshot.budgetDeficit.toLocaleString('tr-TR')} ₺ aştın.
-
-**Dikkat etmen gereken:** 5.000 TL yeni harcama bütçe açığını daha da büyütecektir.
-
-**Bugün için:** Bu harcamayı önümüzdeki aya ertelemeni tavsiye ederim.
-
-**Sonraki adım:** Kalan günlerde zorunlu ödemelere odaklanalım.`
+          ? `**Durumun:** Bu ay planlanan bütçeni ` +
+            `${snapshot.budgetDeficit.toLocaleString('tr-TR')} ₺ aştın.\n\n` +
+            `**Dikkat etmen gereken:** 5.000 TL yeni harcama bütçe açığını daha da büyütecektir.\n\n` +
+            `**Bugün için:** Bu harcamayı önümüzdeki aya ertelemeni tavsiye ederim.\n\n` +
+            `**Sonraki adım:** Kalan günlerde zorunlu ödemelere odaklanalım.`
           : snapshot.dailySafeSpending >=
               5000 / Math.max(1, snapshot.remainingDays)
-            ? `**Durumun:** Kullanılabilir bütçen ${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺ ve günlük güvenli harcaman ${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺.
-
-**Dikkat etmen gereken:** Bu harcama sonrası kalan günlerdeki günlük limitin bir miktar düşecektir.
-
-**Bugün için:** Acil bir ihtiyaçsa bütçen dahilinde karşılanabilir.
-
-**Sonraki adım:** Harcama sonrası bütçeni yeniden kontrol et.`
-            : `**Durumun:** Kalan bütçen (${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺) bu harcama için sınırda.
-
-**Dikkat etmen gereken:** 5.000 TL harcama ay sonunda nakit açığına yol açabilir.
-
-**Bugün için:** Harcamayı bölmeyi veya ertelemeyi değerlendir.`;
+            ? `**Durumun:** Kullanılabilir bütçen ` +
+              `${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺ ve ` +
+              `günlük güvenli harcaman ${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺.\n\n` +
+              `**Dikkat etmen gereken:** Bu harcama sonrası kalan günlerdeki günlük limitin bir miktar düşecektir.\n\n` +
+              `**Bugün için:** Acil bir ihtiyaçsa bütçen dahilinde karşılanabilir.\n\n` +
+              `**Sonraki adım:** Harcama sonrası bütçeni yeniden kontrol et.`
+            : `**Durumun:** Kalan bütçen ` +
+              `(${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺) bu harcama için sınırda.\n\n` +
+              `**Dikkat etmen gereken:** 5.000 TL harcama ay sonunda nakit açığına yol açabilir.\n\n` +
+              `**Bugün için:** Harcamayı bölmeyi veya ertelemeyi değerlendir.`;
       } else if (
         cleanText.toLowerCase().includes('borç') ||
         cleanText.toLowerCase().includes('önce')
       ) {
-        fallbackText = `**Durumun:** Toplam kayıtlı borcun ${snapshot.totalDebt.toLocaleString('tr-TR')} ₺ seviyesindedir.
-
-**Dikkat etmen gereken:** Faiz maliyeti en yüksek olan KMH ve kredi kartı dönem borçları ilk önceliğin olmalıdır.
-
-**Bugün için:** Yaklaşan asgari ve taksit ödemelerini zamanında yaparak gecikme zammından korun.
-
-**Sonraki adım:** Kalan serbest nakdini faizi en yüksek borca yönlendir.`;
+        fallbackText =
+          `**Durumun:** Toplam kayıtlı borcun ` +
+          `${snapshot.totalDebt.toLocaleString('tr-TR')} ₺ seviyesindedir.\n\n` +
+          `**Dikkat etmen gereken:** Faiz maliyeti en yüksek olan KMH ve kredi kartı ` +
+          `dönem borçları ilk önceliğin olmalıdır.\n\n` +
+          `**Bugün için:** Yaklaşan asgari ve taksit ödemelerini zamanında yaparak ` +
+          `gecikme zammından korun.\n\n` +
+          `**Sonraki adım:** Kalan serbest nakdini faizi en yüksek borca yönlendir.`;
       } else {
-        fallbackText = `**Durumun:** Toplam kullanılabilir paran ${snapshot.totalBalance.toLocaleString('tr-TR')} ₺, bu ayki tüketim harcaman ${snapshot.monthlyExpenses.toLocaleString('tr-TR')} ₺.
-
-**Dikkat etmen gereken:** Yaklaşan ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ zorunlu ödemen için nakit ayrılmıştır.
-
-**Bugün için:** Günlük güvenli harcama limitin **${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺**'dir.
-
-**Sonraki adım:** Bu harcama limitine sadık kalarak ayı bütçe içinde kapatabilirsin.`;
+        fallbackText =
+          `**Durumun:** Toplam kullanılabilir paran ` +
+          `${snapshot.totalBalance.toLocaleString('tr-TR')} ₺, ` +
+          `bu ayki tüketim harcaman ${snapshot.monthlyExpenses.toLocaleString('tr-TR')} ₺.\n\n` +
+          `**Dikkat etmen gereken:** Yaklaşan ` +
+          `${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ ` +
+          `zorunlu ödemen için nakit ayrılmıştır.\n\n` +
+          `**Bugün için:** Günlük güvenli harcama limitin ` +
+          `**${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺**'dir.\n\n` +
+          `**Sonraki adım:** Bu harcama limitine sadık kalarak ayı bütçe içinde kapatabilirsin.`;
       }
 
       const coachMsg: CoachMessage = {
@@ -1789,7 +1225,10 @@ const handleAddIncome = (
 
       setAppData((prev) => ({
         ...prev,
-        coachMessages: [...prev.coachMessages, coachMsg],
+        coachMessages: [
+          ...prev.coachMessages,
+          coachMsg,
+        ],
       }));
     } finally {
       setIsCoachLoading(false);
