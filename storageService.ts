@@ -1,4 +1,4 @@
-import { AppData, BankAccount, CreditCard, Loan, Overdraft, OtherDebt, Income, Expense, ScheduledPayment, CoachMessage } from '../types/finance';
+import { AppData, BankAccount, CreditCard, Loan, Overdraft, OtherDebt, Income, Expense, ScheduledPayment, CoachMessage } from './finance';
 
 const STORAGE_KEY = 'cebi_finance_app_v1';
 
