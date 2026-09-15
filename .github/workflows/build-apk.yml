@@ -22,7 +22,7 @@ jobs:
           node-version: 18
 
       - name: Bağımlılıkları Yükle
-        run: npm ci
+        run: npm install
 
       - name: Capacitor / Web Build Al
         run: npm run build
@@ -44,6 +44,3 @@ jobs:
         with:
           name: cebi-release-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-- name: Bağımlılıkları Yükle
-        run: npm install
