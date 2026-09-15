@@ -1240,7 +1240,6 @@ const handleAddIncome = (
           coachMsg,
         ],
       }));
-        );
 
         if (!account) {
           throw new Error(
