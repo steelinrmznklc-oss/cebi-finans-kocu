@@ -42,9 +42,6 @@ jobs:
           distribution: temurin
           java-version: '21'
 
-      - name: Android SDK Kurulumu
-        uses: android-actions/setup-android@v3
-
       - name: Android APK Derle
         working-directory: android
         run: |
