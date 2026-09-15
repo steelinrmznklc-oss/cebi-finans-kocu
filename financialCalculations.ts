@@ -12,7 +12,7 @@ import {
   DebtDetailItem,
   ExpenseCategory,
   AppData,
-} from '../types/finance';
+} from './finance';
 
 export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   market: 'Market & Gıda',
