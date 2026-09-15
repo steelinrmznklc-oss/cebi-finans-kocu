@@ -21,17 +21,17 @@ jobs:
         with:
           node-version: 18
 
-- name: Bağımlılıkları Yükle
-  run: npm install
+      - name: Bağımlılıkları Yükle
+        run: npm install
 
-- name: Tailwind Linux native paketini yükle
-  run: npm install @tailwindcss/oxide-linux-x64-gnu --save-dev
+      - name: Tailwind Linux native paketini yükle
+        run: npm install @tailwindcss/oxide-linux-x64-gnu --save-dev
 
-- name: TypeScript kontrolü
-  run: npx tsc --noEmit
+      - name: TypeScript kontrolü
+        run: npx tsc --noEmit
 
-- name: Capacitor / Web Build Al
-  run: npm run build
+      - name: Capacitor / Web Build Al
+        run: npm run build
 
       - name: Java JDK Kurulumu
         uses: actions/setup-java@v4
