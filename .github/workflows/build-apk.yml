@@ -24,6 +24,9 @@ jobs:
       - name: Bağımlılıkları Yükle
         run: npm install
 
+      - name: TypeScript kontrolü
+        run: npx tsc --noEmit
+
       - name: Capacitor / Web Build Al
         run: npm run build
 
