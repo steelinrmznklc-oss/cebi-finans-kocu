@@ -33,6 +33,12 @@ jobs:
       - name: Capacitor / Web Build Al
         run: npm run build
 
+        - name: Android projesini oluştur
+  run: npx cap add android
+
+- name: Capacitor sync
+  run: npx cap sync android
+
       - name: Java JDK Kurulumu
         uses: actions/setup-java@v4
         with:
