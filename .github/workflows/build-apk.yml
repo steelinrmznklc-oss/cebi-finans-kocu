@@ -1,9 +1,46 @@
-- name: Build CEBİ APK
-  uses: actions/checkout@v4
-  with:
-    ref: android-apk
+name: Build CEBİ APK
+
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Android APK branch'ini indir
+        uses: actions/checkout@v4
+        with:
+          ref: android-apk
+
+      - name: Node.js Kurulumu
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Bağımlılıkları Yükle
+        run: npm ci
+
+      - name: Capacitor / Web Build Al
+        run: npm run build
+
+      - name: Java JDK Kurulumu
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Android APK Derle
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: APK Dosyasını Yükle (Artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: cebi-release-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
