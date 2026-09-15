@@ -623,7 +623,7 @@ export default function App() {
         }
       );
 
-      if (!response.ok) {
+           if (!response.ok) {
         throw new Error(`Server returned ${response.status}`);
       }
 
@@ -632,27 +632,12 @@ export default function App() {
       // =====================================================
       // GEMINI ACTION ENGINE
       // =====================================================
-      //
-      // Server bir action döndürürse burada gerçekten uyguluyoruz.
-      //
-      // Örnek:
-      // "Markette 850 TL harcadım Garanti kredi kartımdan."
-      //
-      // Gemini:
-      // {
-      //   name: "add_expense",
-      //   args: {
-      //     amount: 850,
-      //     category: "market",
-      //     paymentSourceType: "credit_card",
-      //     paymentSourceId: "card-123"
-      //   }
-      // }
-      //
-      // Sonra mevcut CEBİ finans motorunu çalıştırıyoruz.
-      // =====================================================
 
       const action = result?.action;
+
+      // =====================================================
+      // HARCAMA EKLEME ACTION
+      // =====================================================
 
       if (action?.name === 'add_expense') {
         const args = action.args || {};
@@ -663,7 +648,6 @@ export default function App() {
           throw new Error('Geçersiz harcama tutarı.');
         }
 
-        // CEBİ'nin gerçek kategori değerleri
         const validCategories = [
           'market',
           'yemek',
@@ -680,13 +664,18 @@ export default function App() {
 
         type ValidExpenseCategory = (typeof validCategories)[number];
 
-        const categoryCandidate = String(args.category || 'diger').toLowerCase();
-
-        const category: ValidExpenseCategory = validCategories.includes(
-          categoryCandidate as ValidExpenseCategory
+        const categoryCandidate = String(
+          args.category || 'diger'
         )
-          ? (categoryCandidate as ValidExpenseCategory)
-          : 'diger';
+          .trim()
+          .toLowerCase();
+
+        const category: ValidExpenseCategory =
+          validCategories.includes(
+            categoryCandidate as ValidExpenseCategory
+          )
+            ? (categoryCandidate as ValidExpenseCategory)
+            : 'diger';
 
         let paymentSourceId: string | undefined;
         let paymentSourceName: string | undefined;
@@ -700,6 +689,7 @@ export default function App() {
         // ------------------------------------------
         // BANKA HESABI
         // ------------------------------------------
+
         if (args.paymentSourceType === 'bank_account') {
           const account = appData.accounts.find(
             (acc) => acc.id === String(args.paymentSourceId)
@@ -713,12 +703,14 @@ export default function App() {
 
           paymentSourceType = 'bank_account';
           paymentSourceId = account.id;
-          paymentSourceName = `${account.bankName} - ${account.accountName}`;
+          paymentSourceName =
+            `${account.bankName} - ${account.accountName}`;
         }
 
         // ------------------------------------------
         // KREDİ KARTI
         // ------------------------------------------
+
         else if (args.paymentSourceType === 'credit_card') {
           const card = appData.creditCards.find(
             (c) => c.id === String(args.paymentSourceId)
@@ -732,12 +724,14 @@ export default function App() {
 
           paymentSourceType = 'credit_card';
           paymentSourceId = card.id;
-          paymentSourceName = `${card.bank} - ${card.cardName}`;
+          paymentSourceName =
+            `${card.bank} - ${card.cardName}`;
         }
 
         // ------------------------------------------
         // NAKİT
         // ------------------------------------------
+
         else if (
           args.paymentSourceType === 'cash' ||
           args.paymentSourceType === 'nakit'
@@ -750,6 +744,7 @@ export default function App() {
         // ------------------------------------------
         // DİĞER
         // ------------------------------------------
+
         else {
           paymentSourceType = 'diger';
           paymentSourceId = undefined;
@@ -758,7 +753,7 @@ export default function App() {
 
         const expenseDate =
           typeof args.date === 'string' && args.date.trim()
-            ? args.date
+            ? args.date.trim()
             : new Date().toISOString().slice(0, 10);
 
         const note =
@@ -766,7 +761,7 @@ export default function App() {
             ? args.note.trim()
             : `CEBİ AI: ${cleanText}`;
 
-        // Mevcut CEBİ harcama motorunu çalıştır.
+        // Mevcut CEBİ finans motorunu çalıştır.
         handleAddExpense({
           amount,
           category,
@@ -778,12 +773,15 @@ export default function App() {
           isDebtPayment: false,
         });
 
-        const formattedAmount = amount.toLocaleString('tr-TR');
+        const formattedAmount =
+          amount.toLocaleString('tr-TR');
 
         const confirmationMessage =
-          paymentSourceName && paymentSourceType === 'credit_card'
+          paymentSourceName &&
+          paymentSourceType === 'credit_card'
             ? `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName} üzerinden kaydettim. Kredi kartı borcunu ve kullanılabilir limitini güncelledim.`
-            : paymentSourceName && paymentSourceType === 'bank_account'
+            : paymentSourceName &&
+                paymentSourceType === 'bank_account'
               ? `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName} üzerinden kaydettim. Hesap bakiyeni güncelledim.`
               : `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName || 'Diğer'} olarak kaydettim.`;
 
@@ -796,7 +794,111 @@ export default function App() {
 
         setAppData((prev) => ({
           ...prev,
-          coachMessages: [...prev.coachMessages, coachMsg],
+          coachMessages: [
+            ...prev.coachMessages,
+            coachMsg,
+          ],
+        }));
+
+        return;
+      }
+
+      // =====================================================
+      // GELİR EKLEME ACTION
+      // =====================================================
+
+      if (action?.name === 'add_income') {
+        const args = action.args || {};
+
+        const amount = Number(args.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error('Geçersiz gelir tutarı.');
+        }
+
+        const targetAccountId =
+          typeof args.targetAccountId === 'string'
+            ? args.targetAccountId.trim()
+            : '';
+
+        if (!targetAccountId) {
+          throw new Error(
+            'AI gelir için banka hesabı seçemedi.'
+          );
+        }
+
+        const account = appData.accounts.find(
+          (acc) => acc.id === targetAccountId
+        );
+
+        if (!account) {
+          throw new Error(
+            'AI gelir hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
+          );
+        }
+
+        const validIncomeCategories = [
+          'maas',
+          'avans',
+          'freelance',
+          'ticari',
+          'kira',
+          'diger',
+        ] as const;
+
+        const categoryCandidate = String(
+          args.category || 'diger'
+        )
+          .trim()
+          .toLowerCase();
+
+        const category = validIncomeCategories.includes(
+          categoryCandidate as (typeof validIncomeCategories)[number]
+        )
+          ? categoryCandidate
+          : 'diger';
+
+        const incomeDate =
+          typeof args.date === 'string' && args.date.trim()
+            ? args.date.trim()
+            : new Date().toISOString().slice(0, 10);
+
+        const incomeName =
+          typeof args.name === 'string' && args.name.trim()
+            ? args.name.trim()
+            : 'AI Geliri';
+
+        // Mevcut CEBİ gelir motorunu çalıştır.
+        handleAddIncome({
+          amount,
+          name: incomeName,
+          category: category as any,
+          date: incomeDate,
+          targetAccountId,
+        } as any);
+
+        const formattedAmount =
+          amount.toLocaleString('tr-TR');
+
+        const accountName =
+          `${account.bankName} - ${account.accountName}`;
+
+        const confirmationMessage =
+          `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${accountName} hesabına kaydettim.`;
+
+        const coachMsg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: confirmationMessage,
+          timestamp: new Date().toISOString(),
+        };
+
+        setAppData((prev) => ({
+          ...prev,
+          coachMessages: [
+            ...prev.coachMessages,
+            coachMsg,
+          ],
         }));
 
         return;
@@ -805,6 +907,268 @@ export default function App() {
       // =====================================================
       // BORÇ ÖDEME ACTION
       // =====================================================
+
+      if (action?.name === 'make_debt_payment') {
+        const args = action.args || {};
+
+        const amount = Number(args.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error('Geçersiz borç ödeme tutarı.');
+        }
+
+        const debtType = String(
+          args.debtType || ''
+        ).toLowerCase();
+
+        const debtId = String(
+          args.debtId || ''
+        );
+
+        if (!debtId) {
+          throw new Error(
+            'AI borç ödeme için borç seçemedi.'
+          );
+        }
+
+        // ------------------------------------------
+        // ÖDEME YAPILACAK BANKA HESABI
+        // ------------------------------------------
+
+        let bankAccountId = String(
+          args.bankAccountId || ''
+        );
+
+        // Hesap belirtilmemişse ilk banka hesabını kullan.
+        if (!bankAccountId) {
+          bankAccountId =
+            appData.accounts[0]?.id || '';
+        }
+
+        if (!bankAccountId) {
+          throw new Error(
+            'Borç ödemesi için CEBİ içinde banka hesabı bulunamadı.'
+          );
+        }
+
+        const bankAccount = appData.accounts.find(
+          (acc) => acc.id === bankAccountId
+        );
+
+        if (!bankAccount) {
+          throw new Error(
+            'AI borç ödemesi için seçtiği banka hesabı CEBİ içinde bulunamadı.'
+          );
+        }
+
+        // ------------------------------------------
+        // BORÇ KAYNAĞINI BUL
+        // ------------------------------------------
+
+        let debtName = 'Borç';
+
+        if (debtType === 'card') {
+          const card = appData.creditCards.find(
+            (c) => c.id === debtId
+          );
+
+          if (!card) {
+            throw new Error(
+              'AI bir kredi kartı borcu seçti fakat bu kart CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName = `${card.bank} - ${card.cardName}`;
+        }
+
+        else if (debtType === 'loan') {
+          const loan = appData.loans.find(
+            (l) => l.id === debtId
+          );
+
+          if (!loan) {
+            throw new Error(
+              'AI bir kredi/kredi borcu seçti fakat bu borç CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName =
+            (loan as any).name ||
+            (loan as any).bankName ||
+            'Kredi';
+        }
+
+        else if (debtType === 'kmh') {
+          const overdraft = appData.overdrafts.find(
+            (o) => o.id === debtId
+          );
+
+          if (!overdraft) {
+            throw new Error(
+              'AI bir KMH borcu seçti fakat bu borç CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName =
+            (overdraft as any).name ||
+            (overdraft as any).bankName ||
+            'KMH';
+        }
+
+        else if (debtType === 'other') {
+          const otherDebt = appData.otherDebts.find(
+            (d) => d.id === debtId
+          );
+
+          if (!otherDebt) {
+            throw new Error(
+              'AI bir diğer borç seçti fakat bu borç CEBİ içinde bulunamadı.'
+            );
+          }
+
+          debtName =
+            (otherDebt as any).name ||
+            'Diğer Borç';
+        }
+
+        else {
+          throw new Error(
+            'AI geçersiz bir borç türü gönderdi.'
+          );
+        }
+
+        // ------------------------------------------
+        // MEVCUT CEBİ BORÇ ÖDEME MOTORU
+        // ------------------------------------------
+
+        handleMakeDebtPayment({
+          debtType: debtType as any,
+          debtId,
+          amount,
+          bankAccountId,
+        } as any);
+
+        const formattedAmount =
+          amount.toLocaleString('tr-TR');
+
+        const confirmationMessage =
+          `✅ ${formattedAmount} ₺ ${debtName} borcunu ${bankAccount.bankName} - ${bankAccount.accountName} hesabından ödedim.`;
+
+        const coachMsg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: confirmationMessage,
+          timestamp: new Date().toISOString(),
+        };
+
+        setAppData((prev) => ({
+          ...prev,
+          coachMessages: [
+            ...prev.coachMessages,
+            coachMsg,
+          ],
+        }));
+
+        return;
+      }
+
+      // =====================================================
+      // NORMAL GEMINI CEVABI
+      // =====================================================
+
+      const aiReply =
+        result?.reply ||
+        result?.answer ||
+        'İşlemi anlayamadım. Biraz daha açık anlatır mısın?';
+
+      const coachMsg: CoachMessage = {
+        id: `msg-coach-${Date.now()}`,
+        sender: 'coach',
+        text: aiReply,
+        timestamp: new Date().toISOString(),
+      };
+
+      setAppData((prev) => ({
+        ...prev,
+        coachMessages: [
+          ...prev.coachMessages,
+          coachMsg,
+        ],
+      }));
+
+  const validIncomeCategories = [
+    'maas',
+    'avans',
+    'freelance',
+    'ticari',
+    'kira',
+    'diger',
+  ] as const;
+
+  type ValidIncomeCategory = (typeof validIncomeCategories)[number];
+
+  const categoryCandidate = String(
+    args.category || 'diger'
+  ).toLowerCase();
+
+  const category: ValidIncomeCategory =
+    validIncomeCategories.includes(
+      categoryCandidate as ValidIncomeCategory
+    )
+      ? (categoryCandidate as ValidIncomeCategory)
+      : 'diger';
+
+  const incomeName =
+    typeof args.name === 'string' && args.name.trim()
+      ? args.name.trim()
+      : 'Gelir';
+
+  const incomeDate =
+    typeof args.date === 'string' && args.date.trim()
+      ? args.date
+      : new Date().toISOString().slice(0, 10);
+
+  handleAddIncome({
+    amount,
+    name: incomeName,
+    frequency: 'once',
+    dayOfMonth: new Date(incomeDate).getDate(),
+    category,
+    paymentDate: incomeDate,
+    isRecurring: false,
+  });
+
+  // Gerçekten hesaba yatan gelirse banka bakiyesini de artır.
+  setAppData((prev) => ({
+    ...prev,
+    accounts: prev.accounts.map((acc) =>
+      acc.id === account.id
+        ? {
+            ...acc,
+            balance: acc.balance + amount,
+            updatedAt: new Date().toISOString(),
+          }
+        : acc
+    ),
+  }));
+
+  const formattedAmount = amount.toLocaleString('tr-TR');
+
+  const coachMsg: CoachMessage = {
+    id: `msg-coach-${Date.now()}`,
+    sender: 'coach',
+    text: `✅ ${formattedAmount} ₺ ${incomeName} gelirini ${account.bankName} - ${account.accountName} hesabına kaydettim. Hesap bakiyeni güncelledim.`,
+    timestamp: new Date().toISOString(),
+  };
+
+  setAppData((prev) => ({
+    ...prev,
+    coachMessages: [...prev.coachMessages, coachMsg],
+  }));
+
+  return;
+}
+      
       if (action?.name === 'make_debt_payment') {
         const args = action.args || {};
 
