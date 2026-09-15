@@ -22,7 +22,7 @@ import {
   ExpenseCategory,
   BankAccount,
   CreditCard,
-} from '../types/finance';
+} from './finance';
 import { EXPENSE_CATEGORY_LABELS, EXPENSE_CATEGORY_COLORS } from './financialCalculations';
 
 interface QuickExpenseModalProps {
