@@ -1,0 +1,4 @@
+- name: Android APK branch'ini indir
+  uses: actions/checkout@v4
+  with:
+    ref: android-apk
