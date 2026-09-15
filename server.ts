@@ -171,88 +171,89 @@ const addExpenseTool = {
 /**
  * GELİR EKLE
  */
-{
-  name: 'add_income',
+const addIncomeTool = {
+  name: "add_income",
   description:
-    'Kullanıcının gelirini CEBİ sistemine kaydet. Maaş, avans, freelance, ticari gelir, kira geliri veya diğer gelirler için kullan. Kullanıcı gelirinin bir banka hesabına yattığını söylüyorsa targetAccountId olarak verilen CEBİ banka hesabını kullan.',
-  parametersJsonSchema: {
-    type: 'object',
+    "Kullanıcının GERÇEKTEN aldığı veya hesabına yatan bir geliri CEBİ'ye kaydetmek için kullanılır. " +
+    "Maaş, avans, freelance ödeme, kira geliri veya diğer gerçek gelirler için kullanılabilir. " +
+    "Kullanıcı gelirinin yatırıldığı banka hesabını belirtiyorsa targetAccountId olarak gerçek hesap ID'sini kullan.",
+
+  parameters: {
+    type: Type.OBJECT,
+
     properties: {
       amount: {
-        type: 'number',
-        description:
-          'Gelir tutarı. Türk lirası cinsinden pozitif sayı.'
+        type: Type.NUMBER,
+        description: "Gelir tutarı. Türk Lirası cinsinden pozitif sayı.",
       },
 
       name: {
-        type: 'string',
+        type: Type.STRING,
         description:
-          'Gelirin adı. Örneğin Maaş, Freelance ödeme, Kira geliri.'
+          "Gelirin adı. Örneğin 'Maaş', 'Avans', 'Freelance ödeme'.",
       },
 
       category: {
-        type: 'string',
+        type: Type.STRING,
         enum: [
-          'maas',
-          'avans',
-          'freelance',
-          'ticari',
-          'kira',
-          'diger'
+          "maas",
+          "avans",
+          "freelance",
+          "ticari",
+          "kira",
+          "diger",
         ],
-        description:
-          'Gelirin CEBİ kategori değeri.'
+        description: "Gelirin CEBİ kategori değeri.",
       },
 
       paymentDate: {
-        type: 'string',
+        type: Type.STRING,
         description:
-          'Gelirin hesaba geçtiği tarih. YYYY-MM-DD formatında. Kullanıcı tarih belirtmezse bugünün tarihini kullan.'
+          "Gelirin hesaba geçtiği tarih. YYYY-MM-DD formatında. Kullanıcı tarih belirtmezse bugünün tarihini kullan.",
       },
 
       frequency: {
-        type: 'string',
+        type: Type.STRING,
         enum: [
-          'monthly',
-          'one_time',
-          'biweekly',
-          'weekly'
+          "monthly",
+          "one_time",
+          "biweekly",
+          "weekly",
         ],
         description:
-          'Gelirin tekrarlanma sıklığı. Maaş gibi düzenli gelirlerde monthly, tek seferlik gelirlerde one_time kullan.'
+          "Gelirin tekrarlanma sıklığı. Maaş gibi düzenli gelirlerde monthly, tek seferlik gelirlerde one_time kullan.",
       },
 
       isRecurring: {
-        type: 'boolean',
+        type: Type.BOOLEAN,
         description:
-          'Gelir düzenli olarak tekrar ediyor mu?'
+          "Gelir düzenli olarak tekrar ediyor mu?",
       },
 
       dayOfMonth: {
-        type: 'number',
+        type: Type.NUMBER,
         description:
-          'Düzenli aylık gelirlerde ödeme günü. 1 ile 31 arasında.'
+          "Düzenli aylık gelirlerde ödeme günü. 1 ile 31 arasında.",
       },
 
       targetAccountId: {
-        type: 'string',
+        type: Type.STRING,
         description:
-          'Gelirin yatırıldığı CEBİ banka hesabının ID değeri. Kullanıcı hesabı belirttiyse verilen hesap listesinden doğru ID seç.'
-      }
+          "Gelirin yatırıldığı CEBİ banka hesabının gerçek ID değeri. Kullanıcı hesap belirttiyse accounts listesinden doğru ID'yi seç. ID uydurma.",
+      },
     },
 
     required: [
-      'amount',
-      'name',
-      'category',
-      'paymentDate',
-      'frequency',
-      'isRecurring',
-      'targetAccountId'
-    ]
-  }
-}
-
+      "amount",
+      "name",
+      "category",
+      "paymentDate",
+      "frequency",
+      "isRecurring",
+      "targetAccountId",
+    ],
+  },
+};
 /**
  * BORÇ ÖDEME
  */
