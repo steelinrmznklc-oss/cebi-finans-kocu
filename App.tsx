@@ -569,16 +569,23 @@ export default function App() {
   // ==========================================
   // FINANCIAL COACH (GEMINI API) HANDLER
   // ==========================================
+  // ==========================================
+  // FINANCIAL COACH (GEMINI API) HANDLER
+  // ==========================================
   const handleSendMessageToCoach = async (userText: string) => {
+    const cleanText = userText.trim();
+
+    if (!cleanText) return;
+
     const userMsg: CoachMessage = {
       id: `msg-user-${Date.now()}`,
       sender: 'user',
-      text: userText,
+      text: cleanText,
       timestamp: new Date().toISOString(),
     };
 
-    // Add user message to state
     const updatedMessages = [...appData.coachMessages, userMsg];
+
     setAppData((prev) => ({
       ...prev,
       coachMessages: updatedMessages,
@@ -587,27 +594,339 @@ export default function App() {
     setIsCoachLoading(true);
 
     try {
-      // Call backend /api/coach
-      const response = await fetch('/api/coach', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          question: userText,
-          message: userText,
-          snapshot,
-          history: updatedMessages.slice(-6).map((m) => ({
-            role: m.sender === 'user' ? 'user' : 'model',
-            text: m.text,
-          })),
-        }),
-      });
+      // Backend'e CEBİ'nin finansal kaynaklarını da gönderiyoruz.
+      // Gemini bu ID'leri kullanarak doğru hesap/kart/borcu seçebilir.
+      const response = await fetch(
+        `${import.meta.env.VITE_API_URL || ''}/api/coach`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question: cleanText,
+            message: cleanText,
+
+            snapshot,
+
+            accounts: appData.accounts,
+            creditCards: appData.creditCards,
+            loans: appData.loans,
+            overdrafts: appData.overdrafts,
+            otherDebts: appData.otherDebts,
+
+            history: updatedMessages.slice(-8).map((m) => ({
+              role: m.sender === 'user' ? 'user' : 'model',
+              text: m.text,
+            })),
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error(`Server returned ${response.status}`);
       }
 
       const result = await response.json();
-      const replyText = result.answer || result.reply || 'Cevap alınamadı.';
+
+      // =====================================================
+      // GEMINI ACTION ENGINE
+      // =====================================================
+      //
+      // Server bir action döndürürse burada gerçekten uyguluyoruz.
+      //
+      // Örnek:
+      // "Markette 850 TL harcadım Garanti kredi kartımdan."
+      //
+      // Gemini:
+      // {
+      //   name: "add_expense",
+      //   args: {
+      //     amount: 850,
+      //     category: "market",
+      //     paymentSourceType: "credit_card",
+      //     paymentSourceId: "card-123"
+      //   }
+      // }
+      //
+      // Sonra mevcut CEBİ finans motorunu çalıştırıyoruz.
+      // =====================================================
+
+      const action = result?.action;
+
+      if (action?.name === 'add_expense') {
+        const args = action.args || {};
+
+        const amount = Number(args.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error('Geçersiz harcama tutarı.');
+        }
+
+        // CEBİ'nin gerçek kategori değerleri
+        const validCategories = [
+          'market',
+          'yemek',
+          'ulasim',
+          'fatura',
+          'kira',
+          'alisveris',
+          'saglik',
+          'eglence',
+          'abonelik',
+          'egitim',
+          'diger',
+        ] as const;
+
+        type ValidExpenseCategory = (typeof validCategories)[number];
+
+        const categoryCandidate = String(args.category || 'diger').toLowerCase();
+
+        const category: ValidExpenseCategory = validCategories.includes(
+          categoryCandidate as ValidExpenseCategory
+        )
+          ? (categoryCandidate as ValidExpenseCategory)
+          : 'diger';
+
+        let paymentSourceId: string | undefined;
+        let paymentSourceName: string | undefined;
+
+        let paymentSourceType:
+          | 'bank_account'
+          | 'credit_card'
+          | 'nakit'
+          | 'diger' = 'diger';
+
+        // ------------------------------------------
+        // BANKA HESABI
+        // ------------------------------------------
+        if (args.paymentSourceType === 'bank_account') {
+          const account = appData.accounts.find(
+            (acc) => acc.id === String(args.paymentSourceId)
+          );
+
+          if (!account) {
+            throw new Error(
+              'AI bir banka hesabı seçti fakat bu hesap CEBİ içinde bulunamadı.'
+            );
+          }
+
+          paymentSourceType = 'bank_account';
+          paymentSourceId = account.id;
+          paymentSourceName = `${account.bankName} - ${account.accountName}`;
+        }
+
+        // ------------------------------------------
+        // KREDİ KARTI
+        // ------------------------------------------
+        else if (args.paymentSourceType === 'credit_card') {
+          const card = appData.creditCards.find(
+            (c) => c.id === String(args.paymentSourceId)
+          );
+
+          if (!card) {
+            throw new Error(
+              'AI bir kredi kartı seçti fakat bu kart CEBİ içinde bulunamadı.'
+            );
+          }
+
+          paymentSourceType = 'credit_card';
+          paymentSourceId = card.id;
+          paymentSourceName = `${card.bank} - ${card.cardName}`;
+        }
+
+        // ------------------------------------------
+        // NAKİT
+        // ------------------------------------------
+        else if (
+          args.paymentSourceType === 'cash' ||
+          args.paymentSourceType === 'nakit'
+        ) {
+          paymentSourceType = 'nakit';
+          paymentSourceId = undefined;
+          paymentSourceName = 'Nakit';
+        }
+
+        // ------------------------------------------
+        // DİĞER
+        // ------------------------------------------
+        else {
+          paymentSourceType = 'diger';
+          paymentSourceId = undefined;
+          paymentSourceName = 'Diğer';
+        }
+
+        const expenseDate =
+          typeof args.date === 'string' && args.date.trim()
+            ? args.date
+            : new Date().toISOString().slice(0, 10);
+
+        const note =
+          typeof args.note === 'string' && args.note.trim()
+            ? args.note.trim()
+            : `CEBİ AI: ${cleanText}`;
+
+        // Mevcut CEBİ harcama motorunu çalıştır.
+        handleAddExpense({
+          amount,
+          category,
+          date: expenseDate,
+          paymentSourceId,
+          paymentSourceName,
+          paymentSourceType,
+          note,
+          isDebtPayment: false,
+        });
+
+        const formattedAmount = amount.toLocaleString('tr-TR');
+
+        const confirmationMessage =
+          paymentSourceName && paymentSourceType === 'credit_card'
+            ? `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName} üzerinden kaydettim. Kredi kartı borcunu ve kullanılabilir limitini güncelledim.`
+            : paymentSourceName && paymentSourceType === 'bank_account'
+              ? `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName} üzerinden kaydettim. Hesap bakiyeni güncelledim.`
+              : `✅ ${formattedAmount} ₺ ${category} harcamasını ${paymentSourceName || 'Diğer'} olarak kaydettim.`;
+
+        const coachMsg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: confirmationMessage,
+          timestamp: new Date().toISOString(),
+        };
+
+        setAppData((prev) => ({
+          ...prev,
+          coachMessages: [...prev.coachMessages, coachMsg],
+        }));
+
+        return;
+      }
+
+      // =====================================================
+      // BORÇ ÖDEME ACTION
+      // =====================================================
+      if (action?.name === 'make_debt_payment') {
+        const args = action.args || {};
+
+        const amount = Number(args.amount);
+
+        if (!Number.isFinite(amount) || amount <= 0) {
+          throw new Error('Geçersiz borç ödeme tutarı.');
+        }
+
+        const debtType = String(args.debtType || '').toLowerCase();
+
+        const allowedDebtTypes = ['card', 'loan', 'kmh', 'other'];
+
+        if (!allowedDebtTypes.includes(debtType)) {
+          throw new Error('Geçersiz borç tipi.');
+        }
+
+        const debtId = String(args.debtId || '');
+
+        if (!debtId) {
+          throw new Error('Borç ID bilgisi eksik.');
+        }
+
+        let debtExists = false;
+
+        if (debtType === 'card') {
+          debtExists = appData.creditCards.some((c) => c.id === debtId);
+        } else if (debtType === 'loan') {
+          debtExists = appData.loans.some((l) => l.id === debtId);
+        } else if (debtType === 'kmh') {
+          debtExists = appData.overdrafts.some((k) => k.id === debtId);
+        } else if (debtType === 'other') {
+          debtExists = appData.otherDebts.some((d) => d.id === debtId);
+        }
+
+        if (!debtExists) {
+          throw new Error(
+            'AI bir borç seçti fakat bu borç CEBİ içinde bulunamadı.'
+          );
+        }
+
+        let bankAccountId: string | undefined;
+
+        if (args.bankAccountId) {
+          const account = appData.accounts.find(
+            (acc) => acc.id === String(args.bankAccountId)
+          );
+
+          if (!account) {
+            throw new Error(
+              'AI ödeme hesabını seçti fakat bu banka hesabı CEBİ içinde bulunamadı.'
+            );
+          }
+
+          bankAccountId = account.id;
+        } else {
+          // Kullanıcı özellikle hesap söylemediyse mevcut ilk banka hesabını kullan.
+          bankAccountId = appData.accounts[0]?.id;
+        }
+
+        if (!bankAccountId) {
+          throw new Error(
+            'Borç ödemesi için CEBİ içinde kayıtlı bir banka hesabı bulunamadı.'
+          );
+        }
+
+        handleMakeDebtPayment(
+          debtType as 'card' | 'loan' | 'kmh' | 'other',
+          debtId,
+          amount,
+          bankAccountId
+        );
+
+        const formattedAmount = amount.toLocaleString('tr-TR');
+
+        let debtName = 'borç';
+
+        if (debtType === 'card') {
+          const card = appData.creditCards.find((c) => c.id === debtId);
+          if (card) {
+            debtName = `${card.bank} ${card.cardName}`;
+          }
+        } else if (debtType === 'loan') {
+          const loan = appData.loans.find((l) => l.id === debtId);
+          if (loan) {
+            debtName = `${loan.bank} ${loan.loanName}`;
+          }
+        } else if (debtType === 'kmh') {
+          const kmh = appData.overdrafts.find((k) => k.id === debtId);
+          if (kmh) {
+            debtName = `${kmh.bank} KMH`;
+          }
+        } else if (debtType === 'other') {
+          const other = appData.otherDebts.find((d) => d.id === debtId);
+          if (other) {
+            debtName = other.debtName;
+          }
+        }
+
+        const coachMsg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: `✅ ${debtName} için ${formattedAmount} ₺ borç ödemesini kaydettim. Ödeme hesabındaki bakiyeyi ve ilgili borcu güncelledim.`,
+          timestamp: new Date().toISOString(),
+        };
+
+        setAppData((prev) => ({
+          ...prev,
+          coachMessages: [...prev.coachMessages, coachMsg],
+        }));
+
+        return;
+      }
+
+      // =====================================================
+      // NORMAL AI CEVABI
+      // =====================================================
+
+      const replyText =
+        result?.answer ||
+        result?.reply ||
+        'Cevap alınamadı.';
 
       const coachMsg: CoachMessage = {
         id: `msg-coach-${Date.now()}`,
@@ -621,21 +940,70 @@ export default function App() {
         coachMessages: [...prev.coachMessages, coachMsg],
       }));
     } catch (err) {
-      console.error('Coach API call failed, using client-side smart fallback:', err);
-      // Fallback response grounded in calculated snapshot
+      console.error(
+        'Coach API call failed, using client-side smart fallback:',
+        err
+      );
+
+      // =====================================================
+      // CLIENT-SIDE FALLBACK
+      // =====================================================
+
       let fallbackText = '';
+
       if (snapshot.hasCashShortfall) {
-        fallbackText = `**Durumun:** Şu an hesaplarında ${snapshot.totalBalance.toLocaleString('tr-TR')} ₺ bulunurken, ay sonuna kadar ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ zorunlu ödeme yükümlülüğün var.\n\n**Dikkat etmen gereken:** Mevcut nakdinde ${snapshot.cashShortfall.toLocaleString('tr-TR')} ₺ açık bulunuyor. Bu nedenle bugünkü günlük güvenli harcama limitin **0 ₺**'dir.\n\n**Bugün için:** Beklenen gelirlerin fiilen hesabına geçene kadar zorunlu olmayan tüm nakit harcamalarını durdurmalısın.\n\n**Sonraki adım:** Gelirlerin yattığında planlanan günlük bütçen ${snapshot.plannedDailyBudget.toLocaleString('tr-TR')} ₺ / gün seviyesine gelecektir.`;
-      } else if (userText.includes('5.000') || userText.includes('alışveriş')) {
+        fallbackText = `**Durumun:** Şu an hesaplarında ${snapshot.totalBalance.toLocaleString('tr-TR')} ₺ bulunurken, ay sonuna kadar ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ zorunlu ödeme yükümlülüğün var.
+
+**Dikkat etmen gereken:** Mevcut nakdinde ${snapshot.cashShortfall.toLocaleString('tr-TR')} ₺ açık bulunuyor. Bu nedenle bugünkü günlük güvenli harcama limitin **0 ₺**'dir.
+
+**Bugün için:** Beklenen gelirlerin fiilen hesabına geçene kadar zorunlu olmayan tüm nakit harcamalarını durdurmalısın.
+
+**Sonraki adım:** Gelirlerin yattığında planlanan günlük bütçen ${snapshot.plannedDailyBudget.toLocaleString('tr-TR')} ₺ / gün seviyesine gelecektir.`;
+      } else if (
+        cleanText.includes('5.000') ||
+        cleanText.toLowerCase().includes('alışveriş')
+      ) {
         fallbackText = snapshot.isOverBudget
-          ? `**Durumun:** Bu ay planlanan bütçeni ${snapshot.budgetDeficit.toLocaleString('tr-TR')} ₺ aştın.\n\n**Dikkat etmen gereken:** 5.000 TL yeni harcama bütçe açığını daha da büyütecektir.\n\n**Bugün için:** Bu harcamayı önümüzdeki aya ertelemeni tavsiye ederim.\n\n**Sonraki adım:** Kalan günlerde zorunlu ödemelere odaklanalım.`
-          : snapshot.dailySafeSpending >= 5000 / Math.max(1, snapshot.remainingDays)
-          ? `**Durumun:** Kullanılabilir bütçen ${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺ ve günlük güvenli harcaman ${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺.\n\n**Dikkat etmen gereken:** Bu harcama sonrası kalan günlerdeki günlük limitin bir miktar düşecektir.\n\n**Bugün için:** Acil bir ihtiyaçsa bütçen dahilinde karşılanabilir.\n\n**Sonraki adım:** Harcama sonrası bütçeni yeniden kontrol et.`
-          : `**Durumun:** Kalan bütçen (${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺) bu harcama için sınırda.\n\n**Dikkat etmen gereken:** 5.000 TL harcama ay sonunda nakit açığına yol açabilir.\n\n**Bugün için:** Harcamayı bölmeyi veya ertelemeyi değerlendir.\n\n**Sonraki adım:** İhtiyaç dışı kalemleri gözden geçir.`;
-      } else if (userText.includes('borç') || userText.includes('önce')) {
-        fallbackText = `**Durumun:** Toplam kayıtlı borcun ${snapshot.totalDebt.toLocaleString('tr-TR')} ₺ seviyesindedir.\n\n**Dikkat etmen gereken:** Faiz maliyeti en yüksek olan KMH ve kredi kartı dönem borçları ilk önceliğin olmalıdır.\n\n**Bugün için:** Yaklaşan asgari ve taksit ödemelerini zamanında yaparak gecikme zammından korun.\n\n**Sonraki adım:** Kalan serbest nakdini faizi en yüksek borca yönlendir.`;
+          ? `**Durumun:** Bu ay planlanan bütçeni ${snapshot.budgetDeficit.toLocaleString('tr-TR')} ₺ aştın.
+
+**Dikkat etmen gereken:** 5.000 TL yeni harcama bütçe açığını daha da büyütecektir.
+
+**Bugün için:** Bu harcamayı önümüzdeki aya ertelemeni tavsiye ederim.
+
+**Sonraki adım:** Kalan günlerde zorunlu ödemelere odaklanalım.`
+          : snapshot.dailySafeSpending >=
+              5000 / Math.max(1, snapshot.remainingDays)
+            ? `**Durumun:** Kullanılabilir bütçen ${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺ ve günlük güvenli harcaman ${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺.
+
+**Dikkat etmen gereken:** Bu harcama sonrası kalan günlerdeki günlük limitin bir miktar düşecektir.
+
+**Bugün için:** Acil bir ihtiyaçsa bütçen dahilinde karşılanabilir.
+
+**Sonraki adım:** Harcama sonrası bütçeni yeniden kontrol et.`
+            : `**Durumun:** Kalan bütçen (${snapshot.remainingBudget.toLocaleString('tr-TR')} ₺) bu harcama için sınırda.
+
+**Dikkat etmen gereken:** 5.000 TL harcama ay sonunda nakit açığına yol açabilir.
+
+**Bugün için:** Harcamayı bölmeyi veya ertelemeyi değerlendir.`;
+      } else if (
+        cleanText.toLowerCase().includes('borç') ||
+        cleanText.toLowerCase().includes('önce')
+      ) {
+        fallbackText = `**Durumun:** Toplam kayıtlı borcun ${snapshot.totalDebt.toLocaleString('tr-TR')} ₺ seviyesindedir.
+
+**Dikkat etmen gereken:** Faiz maliyeti en yüksek olan KMH ve kredi kartı dönem borçları ilk önceliğin olmalıdır.
+
+**Bugün için:** Yaklaşan asgari ve taksit ödemelerini zamanında yaparak gecikme zammından korun.
+
+**Sonraki adım:** Kalan serbest nakdini faizi en yüksek borca yönlendir.`;
       } else {
-        fallbackText = `**Durumun:** Toplam kullanılabilir paran ${snapshot.totalBalance.toLocaleString('tr-TR')} ₺, bu ayki tüketim harcaman ${snapshot.monthlyExpenses.toLocaleString('tr-TR')} ₺.\n\n**Dikkat etmen gereken:** Yaklaşan ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ zorunlu ödemen için nakit ayrılmıştır.\n\n**Bugün için:** Günlük güvenli harcama limitin **${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺**'dir.\n\n**Sonraki adım:** Bu harcama limitine sadık kalarak ayı bütçe içinde kapatabilirsin.`;
+        fallbackText = `**Durumun:** Toplam kullanılabilir paran ${snapshot.totalBalance.toLocaleString('tr-TR')} ₺, bu ayki tüketim harcaman ${snapshot.monthlyExpenses.toLocaleString('tr-TR')} ₺.
+
+**Dikkat etmen gereken:** Yaklaşan ${snapshot.upcomingPaymentsTotal.toLocaleString('tr-TR')} ₺ zorunlu ödemen için nakit ayrılmıştır.
+
+**Bugün için:** Günlük güvenli harcama limitin **${snapshot.dailySafeSpending.toLocaleString('tr-TR')} ₺**'dir.
+
+**Sonraki adım:** Bu harcama limitine sadık kalarak ayı bütçe içinde kapatabilirsin.`;
       }
 
       const coachMsg: CoachMessage = {
