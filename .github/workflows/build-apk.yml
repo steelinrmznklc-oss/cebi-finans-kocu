@@ -8,8 +8,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Repository'yi indir
+      - name: Android APK branch'ini indir
         uses: actions/checkout@v4
+        with:
+          ref: android-apk
 
       - name: Node.js kurulumu
         uses: actions/setup-node@v4
@@ -38,7 +40,7 @@ jobs:
       - name: Android SDK kurulumu
         uses: android-actions/setup-android@v3
 
-      - name: Gradle ile APK oluştur
+      - name: APK oluştur
         working-directory: android
         run: ./gradlew assembleDebug
 
