@@ -21,8 +21,8 @@ jobs:
         with:
           node-version: 18
 
-      - name: Bağımlılıkları Yükle
-        run: npm install
+- name: Bağımlılıkları Yükle
+        run: npm install --include=optional
 
       - name: Capacitor / Web Build Al
         run: npm run build
