@@ -888,6 +888,93 @@ function generateFallbackCoachReply(
    CEBİ KOÇ API
    ========================================================= */
 
+
+
+/* =========================================================
+   CEBİ — DETERMINISTIC TRANSACTION PARSER
+   Gemini'ye ulaşmadan önce açık işlem cümlelerini yakalar.
+   ========================================================= */
+function normalizeTR(value: string): string {
+  return value.toLocaleLowerCase("tr-TR")
+    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
+    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s")
+    .replace(/ö/g, "o").replace(/ç/g, "c").trim();
+}
+function parseTurkishAmount(text: string): number | null {
+  const m = text.match(/(\d{1,3}(?:[. ]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*)(?:tl|lira|₺)/i)
+    || text.match(/(?:^|\s)(\d{2,7}(?:[.,]\d+)?)(?:\s|$)/i);
+  if (!m) return null;
+  let raw = m[1].replace(/ /g, "");
+  if (raw.includes(".") && raw.includes(",")) raw = raw.replace(/\./g, "").replace(",", ".");
+  else if (raw.includes(",")) raw = raw.replace(",", ".");
+  else if (/^\d{1,3}\.\d{3}$/.test(raw)) raw = raw.replace(".", "");
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function detectExpenseCategory(text: string): string {
+  const q = normalizeTR(text);
+  if (/market|migros|carrefour|bim|a101|sok/.test(q)) return "market";
+  if (/restoran|lokanta|kafe|kahve|yemek|pizza|burger/.test(q)) return "yemek";
+  if (/benzin|mazot|akaryakit|petrol/.test(q)) return "akaryakit";
+  if (/fatura|elektrik|su fatur|dogalgaz|internet fatur/.test(q)) return "fatura";
+  if (/kira/.test(q)) return "kira";
+  if (/ulasim|otobus|metro|taksi|uber/.test(q)) return "ulasim";
+  if (/saglik|eczane|doktor|ilac/.test(q)) return "saglik";
+  if (/giyim|elbise|ayakkabi/.test(q)) return "giyim";
+  if (/elektronik|telefon|laptop|bilgisayar/.test(q)) return "elektronik";
+  if (/abonelik|netflix|spotify/.test(q)) return "abonelik";
+  if (/egitim|kurs|okul/.test(q)) return "egitim";
+  if (/eglence|sinema|konser|oyun/.test(q)) return "eglence";
+  if (/alisveris|magaza/.test(q)) return "alisveris";
+  return "diger";
+}
+function isCompletedExpenseStatement(text: string): boolean {
+  const q = normalizeTR(text);
+  return /\b(yaptim|harcadim|harcama yaptim|odeme yaptim|odedim|aldim|satin aldim|alisveris yaptim)\b/.test(q)
+    && !/(yapacagim|harcayacagim|odeyecegim|alacagim|yapabilir miyim|harcayabilir miyim|alabilir miyim)/.test(q);
+}
+function findExplicitExpenseSource(text: string, data: any) {
+  const q = normalizeTR(text);
+  const cards = Array.isArray(data?.creditCards) ? data.creditCards : [];
+  const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
+  for (const c of cards) {
+    const bank = normalizeTR(String(c.bank || c.bankName || ""));
+    const name = normalizeTR(String(c.cardName || c.name || ""));
+    if ((bank && q.includes(bank)) || (name && q.includes(name))) return { id: String(c.id), type: "credit_card", name: `${c.bank || c.bankName} - ${c.cardName || c.name}` };
+  }
+  for (const a of accounts) {
+    const bank = normalizeTR(String(a.bankName || ""));
+    const name = normalizeTR(String(a.accountName || ""));
+    if ((bank && q.includes(bank)) || (name && q.includes(name))) return { id: String(a.id), type: "bank_account", name: `${a.bankName} - ${a.accountName}` };
+  }
+  if (/nakit|cash/.test(q)) return { id: "cash", type: "cash", name: "Nakit" };
+  if (cards.length === 1 && /kart|kredi/.test(q)) {
+    const c = cards[0]; return { id: String(c.id), type: "credit_card", name: `${c.bank || c.bankName} - ${c.cardName || c.name}` };
+  }
+  if (accounts.length === 1 && /hesabimdan|bankadan|hesabim/.test(q)) {
+    const a = accounts[0]; return { id: String(a.id), type: "bank_account", name: `${a.bankName} - ${a.accountName}` };
+  }
+  return null;
+}
+function tryBuildExpenseAction(text: string, date: string, data: any) {
+  if (!isCompletedExpenseStatement(text)) return null;
+  const amount = parseTurkishAmount(text);
+  if (!amount) return null;
+  const source = findExplicitExpenseSource(text, data);
+  if (!source) return null;
+  return {
+    name: "add_expense",
+    args: {
+      amount,
+      category: detectExpenseCategory(text),
+      date,
+      paymentSourceId: source.id,
+      paymentSourceType: source.type,
+      note: text.trim(),
+    },
+  };
+}
+
 app.post(
   "/api/coach",
   async (req: Request, res: Response) => {
@@ -950,6 +1037,28 @@ app.post(
           : [],
       };
 
+      // Açık ve tamamlanmış harcamaları Gemini'den bağımsız yakala.
+      // Böylece model function calling yapmasa bile işlem kaydı çalışır.
+      const directExpenseAction = tryBuildExpenseAction(
+        queryText,
+        currentDate,
+        sourceData
+      );
+
+      if (directExpenseAction) {
+        const amount = safeNumber(directExpenseAction.args.amount);
+        const actionAnswer =
+          `Tamam. ${formatTL(amount)} ₺ tutarındaki harcamayı CEBİ'ye ekliyorum.`;
+
+        res.json({
+          answer: actionAnswer,
+          reply: actionAnswer,
+          isRuleBased: true,
+          action: directExpenseAction,
+        });
+        return;
+      }
+
       const formattedSnapshot =
         formatSnapshot(snapshot || {});
 
@@ -961,39 +1070,6 @@ app.post(
           conversationHistory,
           history
         );
-
-      /**
-       * Açık ve tamamlanmış tüketim harcamalarını önce CEBİ tarafında
-       * deterministik olarak yakala. Böylece Gemini normal sohbet cevabı
-       * üretse bile gerçek bir harcama kaydı kaçırılmaz.
-       *
-       * Örnek:
-       * "Bugün markette 500 TL Garanti kartımla harcama yaptım."
-       * -> add_expense
-       */
-      const directExpenseAction = tryBuildExpenseAction(
-        queryText,
-        currentDate,
-        sourceData
-      );
-
-      if (directExpenseAction) {
-        const amount = safeNumber(
-          directExpenseAction.args.amount
-        );
-
-        const actionAnswer =
-          `Tamam. ${formatTL(amount)} ₺ tutarındaki harcamayı CEBİ'ye ekliyorum.`;
-
-        res.json({
-          answer: actionAnswer,
-          reply: actionAnswer,
-          isRuleBased: false,
-          action: directExpenseAction,
-        });
-
-        return;
-      }
 
       /**
        * Gemini yoksa güvenli fallback.
@@ -1042,51 +1118,33 @@ TEMEL KURALLAR:
 
 5. TÜKETİM HARCAMASI ile BORÇ ÖDEMESİNİ kesinlikle ayır.
 
-6. GERÇEKLEŞMİŞ İŞLEM KURALI — ÇOK ÖNEMLİ:
-   Kullanıcı "harcadım", "yaptım", "aldım", "ödedim", "alışveriş yaptım"
-   gibi geçmişte veya bugün gerçekleşmiş bir işlem bildiriyorsa bunu
-   yalnızca tavsiye sorusu olarak yorumlama. Gerekli bilgiler mevcutsa
-   ilgili CEBİ aracını MUTLAKA çağır.
+6. Kullanıcı GERÇEKTEN bir harcama yaptığını söylüyorsa
+   ve gerekli bilgiler mevcutsa "add_expense" aracını kullan.
 
-7. Gerçek bir tüketim harcaması için "add_expense" kullan.
-   Kullanıcının cümlesi açıkça gerçekleşmiş harcamayı bildiriyorsa
-   normal finansal analiz cevabı vermek yerine önce işlemi kaydet.
+7. Kullanıcı GERÇEKTEN gelir aldığını veya hesabına gelir yattığını
+   söylüyorsa ve gerekli bilgiler mevcutsa "add_income" aracını kullan.
 
-8. Gerçek bir gelir için "add_income" kullan.
+8. Kullanıcı GERÇEKTEN bir borç ödemesi yaptığını söylüyorsa
+   "make_debt_payment" aracını kullan.
 
-9. Gerçek bir kredi kartı, kredi, KMH veya diğer borç ödemesi için
-   "make_debt_payment" kullan. Tüketim harcaması ile borç ödemesini
-   birbirine karıştırma.
+9. Gelecekte yapılması planlanan harcamaları gerçekleşmiş harcama olarak kaydetme.
 
-10. Gelecekte yapılması planlanan harcamaları gerçekleşmiş harcama
-    olarak kaydetme. "yapacağım", "harcayacağım", "alacağım",
-    "ödeyeceğim", "alabilir miyim", "harcayabilir miyim" gibi ifadeler
-    geleceğe dönükse işlem aracı çağırma.
+10. Kullanıcı yalnızca:
+    "Markette 850 TL harcadım."
+    diyorsa ve ödeme kaynağı belirtilmiyorsa,
+    ödeme kaynağını sormadan kayıt oluşturma.
 
-11. Gerçekleşmiş harcama örneği:
-    "Bugün markette 500 TL Garanti kartımla harcama yaptım."
-    Bu cümlede:
-    - amount = 500
-    - category = market
-    - date = ${currentDate}
-    - paymentSourceType = credit_card
-    - paymentSourceId = aşağıdaki KREDİ KARTLARI listesindeki gerçek
-      Garanti kartının ID'si
-    olacak şekilde add_expense çağır.
+11. Kullanıcı:
+    "Markette 850 TL harcadım Garanti kredi kartımdan."
+    diyorsa uygun Garanti kredi kartını bul ve add_expense kullan.
 
-12. Kullanıcı "Garanti kartımla", "Garanti kartımdan",
-    "Garanti kredi kartımla" gibi bir ifade kullanırsa aşağıdaki
-    KREDİ KARTLARI listesinden banka/kart adı eşleşen gerçek kartı bul.
-    paymentSourceId olarak yalnızca listedeki gerçek ID'yi kullan.
-    ID uydurma.
+12. Kullanıcı "Garanti kartımdan" gibi bir ifade kullanırsa
+    mevcut KREDİ KARTLARI listesindeki en uygun kartı seç.
 
-13. Kullanıcı ödeme kaynağını belirtmiyorsa add_expense çağırma.
-    Eksik bilgi olarak yalnızca ödeme kaynağını sor.
+13. Birden fazla aynı isimde veya benzer ödeme kaynağı varsa
+    tahmin etmek yerine kullanıcıya sor.
 
-14. Birden fazla aynı isimde veya benzer ödeme kaynağı eşleşiyorsa
-    tahmin etme; kullanıcıdan hangi kart/hesap olduğunu sor.
-
-15. Kullanıcı tarih belirtmezse BUGÜNÜ kullan:
+14. Kullanıcı tarih belirtmezse BUGÜNÜ kullan:
     ${currentDate}
 
 15. Türkçe doğal dil ifadelerini doğru yorumla:
@@ -1154,22 +1212,8 @@ Kullanıcının son mesajı:
 
 Bu mesajı dikkatlice analiz et.
 
-ÖNCE İŞLEM NİYETİNİ BELİRLE:
-
-- Kullanıcı gerçekten bir harcama yaptığını bildiriyorsa ve tutar,
-  kategori, tarih ve ödeme kaynağı belli ise add_expense çağır.
-- "Bugün markette 500 TL Garanti kartımla harcama yaptım" gibi bir
-  cümle kesinlikle gerçekleşmiş işlem kabul edilir; normal koç analizi
-  cevabı üretme, add_expense çağrısı yap.
-- Kullanıcının söylediği banka/kart adı aşağıdaki finansal kaynaklar
-  içinde varsa paymentSourceId olarak o kaydın GERÇEK ID'sini kullan.
-- Ödeme kaynağı yoksa işlemi kaydetme; sadece ödeme kaynağını sor.
-- Gerçek gelirde add_income, gerçek borç ödemesinde
-  make_debt_payment kullan.
-- Geleceğe dönük plan veya "yapabilir miyim?" sorularında işlem aracı
-  çağırma.
-- Araç çağırdığında tüm zorunlu parametreleri doldur ve gerçek kayıt
-  ID'leri dışında ID kullanma.
+Eğer kullanıcı gerçek bir finansal işlem yaptıysa ve gerekli
+bilgiler mevcutsa uygun CEBİ aracını çağır.
 
 Eğer gerekli bilgi eksikse araç çağırma ve eksik bilgiyi sor.
 
@@ -1356,229 +1400,4 @@ async function startServer() {
   );
 }
 
-startServer()
-/**
- * Kullanıcının açıkça GERÇEKLEŞMİŞ bir tüketim harcaması söylediğini
- * hızlıca tespit eder. Bu katman özellikle mobil uygulamada Gemini'nin
- * bazen normal sohbet cevabı vermesi durumunda add_expense işleminin
- * kaçırılmasını önler.
- */
-function normalizeTR(value: unknown): string {
-  return String(value ?? "")
-    .toLocaleLowerCase("tr-TR")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/ı/g, "i")
-    .replace(/ğ/g, "g")
-    .replace(/ü/g, "u")
-    .replace(/ş/g, "s")
-    .replace(/ö/g, "o")
-    .replace(/ç/g, "c");
-}
-
-function parseTurkishAmount(text: string): number | null {
-  const match = text.match(
-    /(?:^|\s)(\d{1,3}(?:[.\s]\d{3})*(?:,\d{1,2})?|\d+(?:,\d{1,2})?)(?:\s*(?:tl|lira|₺))?(?=\s|$|[.,])/i
-  );
-
-  if (!match) return null;
-
-  let raw = match[1].replace(/\s/g, "");
-
-  if (raw.includes(".") && raw.includes(",")) {
-    raw = raw.replace(/\./g, "").replace(",", ".");
-  } else if (raw.includes(",")) {
-    raw = raw.replace(",", ".");
-  } else if ((raw.match(/\./g) || []).length > 0) {
-    const parts = raw.split(".");
-    if (parts.length > 2 || parts[parts.length - 1].length === 3) {
-      raw = raw.replace(/\./g, "");
-    }
-  }
-
-  const amount = Number(raw);
-  return Number.isFinite(amount) && amount > 0 ? amount : null;
-}
-
-function detectExpenseCategory(text: string): string | null {
-  const q = normalizeTR(text);
-
-  const categories: Array<[string, string[]]> = [
-    ["market", ["market", "market alisverisi", "migros", "carrefour", "bim", "a101", "sok"]],
-    ["yemek", ["yemek", "restoran", "restoranda", "lokanta", "lokantada", "kafe", "cafede", "cafe"]],
-    ["ulasim", ["ulasim", "otobus", "metro", "taksi", "taxi", "uber"]],
-    ["fatura", ["fatura", "elektrik faturasi", "su faturasi", "internet faturasi", "telefon faturasi"]],
-    ["kira", ["kira"]],
-    ["alisveris", ["alisveris", "magaza", "magazada"]],
-    ["saglik", ["saglik", "eczane", "doktor", "hastane"]],
-    ["eglence", ["eglence", "sinema", "konser"]],
-    ["abonelik", ["abonelik", "netflix", "spotify"]],
-    ["egitim", ["egitim", "kurs", "okul"]],
-    ["akaryakit", ["benzin", "mazot", "akaryakit", "yakit", "petrol"]],
-    ["ev", ["ev esyasi", "ev icin"]],
-    ["giyim", ["giyim", "kiyafet", "elbise", "ayakkabi"]],
-    ["elektronik", ["elektronik", "telefon", "bilgisayar", "laptop"]],
-    ["sigorta", ["sigorta"]],
-    ["vergi", ["vergi"]],
-  ];
-
-  for (const [category, words] of categories) {
-    if (words.some((word) => q.includes(word))) {
-      return category;
-    }
-  }
-
-  return null;
-}
-
-function detectExpenseDate(text: string, currentDate: string): string {
-  const q = normalizeTR(text);
-
-  if (q.includes("dun")) {
-    const date = new Date(`${currentDate}T12:00:00`);
-    date.setDate(date.getDate() - 1);
-    return new Intl.DateTimeFormat("en-CA", {
-      timeZone: "Europe/Istanbul",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).format(date);
-  }
-
-  return currentDate;
-}
-
-function isCompletedExpenseStatement(text: string): boolean {
-  const q = normalizeTR(text);
-
-  const completed =
-    /\b(yaptim|harcadim|aldim|odedim|odeme yaptim|harcama yaptim|alisveris yaptim)\b/i.test(q);
-
-  const futureOrQuestion =
-    /\b(yapacagim|harcayacagim|alacagim|odeyecegim|yapabilir miyim|harcayabilir miyim|alabilir miyim|odemeli miyim)\b/i.test(q);
-
-  return completed && !futureOrQuestion;
-}
-
-function findExplicitExpenseSource(
-  text: string,
-  sourceData: {
-    accounts: any[];
-    creditCards: any[];
-    loans: any[];
-    overdrafts: any[];
-    otherDebts: any[];
-  }
-): { id: string; type: "bank_account" | "credit_card" | "cash" | "other" } | null {
-  const q = normalizeTR(text);
-
-  if (
-    /\b(nakit|nakitle|nakitten|nakit olarak)\b/i.test(q)
-  ) {
-    return { id: "cash", type: "cash" };
-  }
-
-  const candidates: Array<{
-    id: string;
-    type: "bank_account" | "credit_card";
-    label: string;
-  }> = [];
-
-  for (const card of sourceData.creditCards) {
-    candidates.push({
-      id: String(card.id),
-      type: "credit_card",
-      label: normalizeTR(
-        `${card.bank || card.bankName || ""} ${card.cardName || card.name || ""} kart`
-      ),
-    });
-  }
-
-  for (const account of sourceData.accounts) {
-    candidates.push({
-      id: String(account.id),
-      type: "bank_account",
-      label: normalizeTR(
-        `${account.bankName || ""} ${account.accountName || ""} hesap banka hesab`
-      ),
-    });
-  }
-
-  const explicitSource =
-    /\b(kartimdan|kartimla|karttan|kredi kartimdan|kredi kartimla|hesabimdan|hesabimla|banka hesabimdan|banka hesabimla|hesaptan|hesapla)\b/i.test(q);
-
-  if (!explicitSource) {
-    return null;
-  }
-
-  const mentioned = candidates.filter((candidate) => {
-    const words = candidate.label
-      .split(/\s+/)
-      .filter((word) => word.length >= 3);
-
-    return words.some((word) => q.includes(word));
-  });
-
-  if (mentioned.length === 1) {
-    return {
-      id: mentioned[0].id,
-      type: mentioned[0].type,
-    };
-  }
-
-  // "kartımla" denmiş ama banka adı verilmemişse ve tek kayıtlı kart varsa
-  // o kartı kullan. Birden fazla kart varsa tahmin etme.
-  if (
-    mentioned.length === 0 &&
-    explicitSource &&
-    /\b(kartimdan|kartimla|karttan|kredi kartimdan|kredi kartimla)\b/i.test(q)
-  ) {
-    const cards = sourceData.creditCards;
-    if (cards.length === 1) {
-      return {
-        id: String(cards[0].id),
-        type: "credit_card",
-      };
-    }
-  }
-
-  return null;
-}
-
-function tryBuildExpenseAction(
-  text: string,
-  currentDate: string,
-  sourceData: {
-    accounts: any[];
-    creditCards: any[];
-    loans: any[];
-    overdrafts: any[];
-    otherDebts: any[];
-  }
-): { name: "add_expense"; args: Record<string, unknown> } | null {
-  if (!isCompletedExpenseStatement(text)) {
-    return null;
-  }
-
-  const amount = parseTurkishAmount(text);
-  const category = detectExpenseCategory(text);
-  const source = findExplicitExpenseSource(text, sourceData);
-
-  if (!amount || !category || !source) {
-    return null;
-  }
-
-  return {
-    name: "add_expense",
-    args: {
-      amount,
-      category,
-      date: detectExpenseDate(text, currentDate),
-      paymentSourceId: source.id,
-      paymentSourceType: source.type,
-      note: text.trim(),
-    },
-  };
-}
-
-;
+startServer();
