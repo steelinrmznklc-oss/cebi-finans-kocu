@@ -43,6 +43,91 @@ import { QuickExpenseModal } from './QuickExpenseModal';
 import { OnboardingModal } from './OnboardingModal';
 import { SettingsModal } from './SettingsModal';
 
+
+
+// ==========================================================
+// CEBİ — CLIENT-SIDE TRANSACTION PARSER
+// Android APK backend'e ulaşamasa bile temel işlemleri kaydeder.
+// ==========================================================
+function cebiNormalizeTR(value: string): string {
+  return value
+    .toLocaleLowerCase('tr-TR')
+    .replace(/İ/g, 'i')
+    .replace(/I/g, 'i')
+    .replace(/ı/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .trim();
+}
+
+function cebiParseAmount(text: string): number | null {
+  const normalized = text.replace(/\s/g, ' ');
+  const m = normalized.match(/(\d{1,3}(?:[. ]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*)(?:tl|lira|₺)/i)
+    || normalized.match(/(?:^|\s)(\d{2,7}(?:[.,]\d+)?)(?:\s|$)/i);
+  if (!m) return null;
+  let raw = m[1].replace(/ /g, '');
+  if (raw.includes('.') && raw.includes(',')) raw = raw.replace(/\./g, '').replace(',', '.');
+  else if (raw.includes(',')) raw = raw.replace(',', '.');
+  else if (/^\d{1,3}\.\d{3}$/.test(raw)) raw = raw.replace('.', '');
+  const n = Number(raw);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function cebiExpenseCategory(text: string): string {
+  const q = cebiNormalizeTR(text);
+  if (/market|migros|carrefour|bim|a101|sok/.test(q)) return 'market';
+  if (/restoran|lokanta|kafe|kahve|yemek|pizza|burger/.test(q)) return 'yemek';
+  if (/benzin|mazot|akaryakit|petrol/.test(q)) return 'akaryakit';
+  if (/fatura|elektrik|su fatur|dogalgaz|internet fatur/.test(q)) return 'fatura';
+  if (/kira/.test(q)) return 'kira';
+  if (/ulasim|otobus|metro|taksi|uber|yakıt/.test(q)) return 'ulasim';
+  if (/saglik|eczane|doktor|ilac/.test(q)) return 'saglik';
+  if (/giyim|elbise|ayakkabi/.test(q)) return 'giyim';
+  if (/elektronik|telefon|laptop|bilgisayar/.test(q)) return 'elektronik';
+  if (/abonelik|netflix|spotify/.test(q)) return 'abonelik';
+  if (/egitim|kurs|okul/.test(q)) return 'egitim';
+  if (/eglence|sinema|konser|oyun/.test(q)) return 'eglence';
+  if (/alisveris|magaza|satın|satin|aldim/.test(q)) return 'alisveris';
+  return 'diger';
+}
+
+function cebiIsExpense(text: string): boolean {
+  const q = cebiNormalizeTR(text);
+  return /\b(yaptim|harcadim|harcama yaptim|odeme yaptim|odedim|aldim|satın aldim|satin aldim|alisveris yaptim)\b/.test(q)
+    && !/(yapacagim|harcayacagim|odeyecegim|alacagim|yapabilir miyim|harcayabilir miyim|alabilir miyim)/.test(q);
+}
+
+function cebiFindExpenseSource(text: string, accounts: BankAccount[], cards: CreditCard[]) {
+  const q = cebiNormalizeTR(text);
+  for (const card of cards) {
+    const bank = cebiNormalizeTR(card.bank || '');
+    const name = cebiNormalizeTR(card.cardName || '');
+    if ((bank && q.includes(bank)) || (name && q.includes(name))) {
+      return { id: card.id, name: `${card.bank} - ${card.cardName}`, type: 'credit_card' as const };
+    }
+  }
+  for (const account of accounts) {
+    const bank = cebiNormalizeTR(account.bankName || '');
+    const name = cebiNormalizeTR(account.accountName || '');
+    if ((bank && q.includes(bank)) || (name && q.includes(name))) {
+      return { id: account.id, name: `${account.bankName} - ${account.accountName}`, type: 'bank_account' as const };
+    }
+  }
+  if (/nakit|cash/.test(q)) return { id: undefined, name: 'Nakit', type: 'nakit' as const };
+  if (cards.length === 1 && /kart|kredi/.test(q)) {
+    const card = cards[0];
+    return { id: card.id, name: `${card.bank} - ${card.cardName}`, type: 'credit_card' as const };
+  }
+  if (accounts.length === 1 && /hesabimdan|hesabimdan|bankadan|hesabim/.test(q)) {
+    const account = accounts[0];
+    return { id: account.id, name: `${account.bankName} - ${account.accountName}`, type: 'bank_account' as const };
+  }
+  return null;
+}
+
 export default function App() {
   const [appData, setAppData] = useState<AppData>(() => {
     const loaded = loadAppData();
@@ -618,9 +703,52 @@ const handleAddIncome = (
 
     setIsCoachLoading(true);
 
+    // Android'de backend URL tanımlı olmasa bile gerçek harcamayı yerelde kaydet.
+    // Böylece "bugün markette 500 TL Garanti kartımla harcama yaptım" gibi komutlar
+    // doğrudan CEBİ'ye işlenir.
+    if (cebiIsExpense(cleanText)) {
+      const amount = cebiParseAmount(cleanText);
+      const source = cebiFindExpenseSource(cleanText, appData.accounts, appData.creditCards);
+
+      if (amount && source) {
+        handleAddExpense({
+          amount,
+          category: cebiExpenseCategory(cleanText) as any,
+          date: new Date().toISOString().slice(0, 10),
+          paymentSourceId: source.id,
+          paymentSourceName: source.name,
+          paymentSourceType: source.type as any,
+          note: cleanText,
+          isDebtPayment: false,
+        });
+
+        const msg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: `✅ ${amount.toLocaleString('tr-TR')} ₺ ${cebiExpenseCategory(cleanText)} harcamasını ${source.name} üzerinden kaydettim.`,
+          timestamp: new Date().toISOString(),
+        };
+        setAppData((prev) => ({ ...prev, coachMessages: [...prev.coachMessages, msg] }));
+        setIsCoachLoading(false);
+        return;
+      }
+
+      if (amount && !source) {
+        const msg: CoachMessage = {
+          id: `msg-coach-${Date.now()}`,
+          sender: 'coach',
+          text: 'Harcama tutarını anladım. Hangi banka hesabı veya kredi kartından ödediğini de yazarsan hemen kaydedebilirim.',
+          timestamp: new Date().toISOString(),
+        };
+        setAppData((prev) => ({ ...prev, coachMessages: [...prev.coachMessages, msg] }));
+        setIsCoachLoading(false);
+        return;
+      }
+    }
+
     try {
       const response = await fetch(
-        `${import.meta.env.VITE_API_URL || ''}/api/coach`,
+        `${(import.meta.env.VITE_API_URL || localStorage.getItem('CEBI_API_URL') || '').replace(/\/$/, '')}/api/coach`,
         {
           method: 'POST',
           headers: {
@@ -1361,6 +1489,17 @@ const handleAddIncome = (
 
   return (
     <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col selection:bg-emerald-100 selection:text-emerald-900">
+      <style>{`
+        /* Dashboard koyu kartlarda koyu metin görünürlüğü */
+        .bg-slate-900 .text-slate-900, .bg-slate-950 .text-slate-900,
+        .bg-slate-900 .text-slate-800, .bg-slate-950 .text-slate-800,
+        .bg-slate-900 .text-slate-700, .bg-slate-950 .text-slate-700 {
+          color: #f8fafc !important;
+        }
+        .bg-slate-900 .text-slate-600, .bg-slate-950 .text-slate-600 {
+          color: #cbd5e1 !important;
+        }
+      `}</style>
       {/* Navigation Bars */}
       <Navbar
         currentTab={currentTab}
@@ -1492,4 +1631,3 @@ const handleAddIncome = (
     </div>
   );
 }
-
