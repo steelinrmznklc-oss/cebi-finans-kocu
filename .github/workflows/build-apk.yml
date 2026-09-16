@@ -31,6 +31,8 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Capacitor / Web Build Al
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL }}
         run: CAPACITOR_BUILD=true npm run build
 
       - name: Android projesini oluştur
