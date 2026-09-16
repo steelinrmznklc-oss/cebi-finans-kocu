@@ -5,7 +5,9 @@ import { defineConfig } from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: '/cebi-finans-kocu/',
+    base: process.env.CAPACITOR_BUILD === 'true'
+      ? './'
+      : '/cebi-finans-kocu/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
