@@ -10,7 +10,22 @@ import {
 
 import { Expense, ExpenseCategory } from './finance';
 
-interface ReceiptScanResult {
+interface ReceiptApiResult {
+  receipt?: {
+    total?: number | null;
+    date?: string;
+    merchant?: string;
+    category?: ExpenseCategory;
+    categoryConfidence?: 'high' | 'medium' | 'low' | string;
+    notes?: string;
+    time?: string;
+    currency?: string;
+    payment?: unknown;
+    items?: unknown[];
+    needsUserConfirmation?: boolean;
+  };
+
+  // Eski/fallback API yapısını da destekle.
   amount?: number;
   date?: string;
   category?: ExpenseCategory;
@@ -18,6 +33,9 @@ interface ReceiptScanResult {
   note?: string;
   confidence?: number;
   rawText?: string;
+
+  error?: string;
+  message?: string;
 }
 
 interface ReceiptPreviewProps {
@@ -69,27 +87,19 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
       try {
         /*
-         * CEBİ API adresini Coach ekranındaki sistemle aynı şekilde
-         * belirliyoruz.
+         * CEBİ'nin Render backend'i.
          *
-         * Öncelik:
-         * 1. VITE_API_URL
-         * 2. Telefonda localStorage içindeki CEBI_API_URL
-         * 3. Boş değer
+         * API anahtarı burada bulunmaz.
+         * Gemini anahtarı yalnızca Render server tarafındadır.
          */
-        const apiBase = (
-          import.meta.env.VITE_API_URL ||
-          localStorage.getItem('CEBI_API_URL') ||
-          ''
-        ).replace(/\/$/, '');
+        const apiBase =
+          'https://cebi-finans-api.onrender.com';
 
         /*
-         * Data URL içerisinden gerçek MIME tipini alıyoruz.
+         * Data URL içerisinden MIME tipini al.
          *
          * Örnek:
          * data:image/jpeg;base64,...
-         *            ↑
-         *        image/jpeg
          */
         const mimeMatch = imageData.match(
           /^data:(image\/[^;]+);base64,/i
@@ -99,7 +109,7 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           mimeMatch?.[1] || 'image/jpeg';
 
         /*
-         * Backend endpoint:
+         * Render backend:
          *
          * POST /api/receipt/analyze
          */
@@ -117,19 +127,12 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           }
         );
 
-        /*
-         * Önce response'un gerçekten JSON olup olmadığını
-         * kontrol ediyoruz.
-         *
-         * Böylece:
-         * Unexpected token '<', "<!doctype..."
-         *
-         * gibi anlamsız JSON hataları yerine gerçek server
-         * hatasını gösterebiliriz.
-         */
         const contentType =
           response.headers.get('content-type') || '';
 
+        /*
+         * HTTP hata durumları.
+         */
         if (!response.ok) {
           let message =
             `Fiş analiz sunucusu hata döndürdü (${response.status}).`;
@@ -144,16 +147,16 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
                 message = String(errorData.message);
               }
             } catch {
-              // JSON okunamazsa varsayılan hata mesajı kullanılır.
+              // Varsayılan hata mesajı kullanılır.
             }
           } else {
             try {
               const text = await response.text();
 
-              if (text.trim()) {
-                message =
-                  `Sunucu JSON yerine farklı bir yanıt döndürdü (${response.status}).`;
-              }
+              console.error(
+                'Receipt API returned non-JSON response:',
+                text.slice(0, 500)
+              );
             } catch {
               // Varsayılan hata mesajı korunur.
             }
@@ -163,7 +166,7 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         }
 
         /*
-         * Başarılı response JSON değilse açık hata göster.
+         * Başarılı cevap JSON olmalı.
          */
         if (!contentType.includes('application/json')) {
           const text = await response.text();
@@ -174,16 +177,46 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           );
 
           throw new Error(
-            'Fiş analiz sunucusu JSON yerine farklı bir yanıt döndürdü. API adresini kontrol et.'
+            'Fiş analiz sunucusu JSON yerine farklı bir yanıt döndürdü.'
           );
         }
 
-        const result: ReceiptScanResult =
+        const result: ReceiptApiResult =
           await response.json();
 
         if (cancelled) return;
 
+        /*
+         * Güncel server şu yapıyı döndürüyor:
+         *
+         * {
+         *   receipt: {
+         *     total,
+         *     date,
+         *     merchant,
+         *     category,
+         *     categoryConfidence,
+         *     notes
+         *   }
+         * }
+         *
+         * Eski düz yapı da destekleniyor.
+         */
+        const receipt = result.receipt ?? result;
+
+        /*
+         * Tutar
+         */
         if (
+          typeof receipt.total === 'number' &&
+          Number.isFinite(receipt.total)
+        ) {
+          setAmount(
+            receipt.total
+              .toFixed(2)
+              .replace('.', ',')
+          );
+        } else if (
           typeof result.amount === 'number' &&
           Number.isFinite(result.amount)
         ) {
@@ -194,11 +227,29 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           );
         }
 
-        if (result.date) {
+        /*
+         * Tarih
+         */
+        if (receipt.date) {
+          setDate(receipt.date);
+        } else if (result.date) {
           setDate(result.date);
         }
 
+        /*
+         * Kategori
+         */
         if (
+          receipt.category &&
+          CATEGORY_OPTIONS.some(
+            (item) =>
+              item.value === receipt.category
+          )
+        ) {
+          setCategory(
+            receipt.category as ExpenseCategory
+          );
+        } else if (
           result.category &&
           CATEGORY_OPTIONS.some(
             (item) =>
@@ -208,18 +259,70 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           setCategory(result.category);
         }
 
-        if (result.merchant) {
+        /*
+         * İşletme / market
+         */
+        if (receipt.merchant) {
+          setMerchant(receipt.merchant);
+        } else if (result.merchant) {
           setMerchant(result.merchant);
         }
 
-        if (result.note) {
+        /*
+         * Not
+         */
+        if (receipt.notes) {
+          setNote(receipt.notes);
+        } else if (result.note) {
           setNote(result.note);
         }
 
+        /*
+         * Kategori güven seviyesini yüzdeye çevir.
+         *
+         * high   = %95
+         * medium = %75
+         * low    = %50
+         */
         if (
+          receipt.categoryConfidence
+        ) {
+          const confidenceMap: Record<
+            string,
+            number
+          > = {
+            high: 0.95,
+            medium: 0.75,
+            low: 0.5,
+          };
+
+          const mapped =
+            confidenceMap[
+              String(
+                receipt.categoryConfidence
+              ).toLowerCase()
+            ];
+
+          if (mapped !== undefined) {
+            setConfidence(mapped);
+          }
+        } else if (
           typeof result.confidence === 'number'
         ) {
           setConfidence(result.confidence);
+        }
+
+        /*
+         * Server'dan hiçbir tutar gelmediyse
+         * kullanıcıya açık uyarı göster.
+         */
+        if (
+          typeof receipt.total !== 'number' &&
+          typeof result.amount !== 'number'
+        ) {
+          setError(
+            'Fiş okundu ancak toplam tutar belirlenemedi. Lütfen tutarı kontrol edin.'
+          );
         }
       } catch (scanError) {
         if (cancelled) return;
@@ -324,10 +427,7 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
 
   const handleRetry = () => {
     /*
-     * imageData değişmediği için component yeniden
-     * tarama yapmaz.
-     *
-     * Scanner'a geri dönmek için Preview kapatılır.
+     * Scanner'a geri dön.
      */
     onClose();
   };
