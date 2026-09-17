@@ -1,308 +1,231 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from 'react';
 import {
   Camera,
   Image as ImageIcon,
-  Loader2,
-  Receipt,
-  RotateCcw,
   Upload,
   X,
-} from "lucide-react";
-import {
-  BankAccount,
-  CreditCard,
-  Expense,
-} from "./finance";
-import {
-  ReceiptDraft,
-  ReceiptPreview,
-} from "./ReceiptPreview";
+  Loader2,
+  Receipt,
+  AlertCircle,
+} from 'lucide-react';
 
 interface ReceiptScannerProps {
-  accounts: BankAccount[];
-  creditCards: CreditCard[];
-  onConfirmExpense: (
-    expense: Omit<Expense, "id" | "createdAt">
-  ) => void;
+  onReceiptScanned: (imageData: string) => void;
   onClose: () => void;
 }
 
-export const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
-  accounts,
-  creditCards,
-  onConfirmExpense,
+const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
+  onReceiptScanned,
   onClose,
 }) => {
-  const inputRef = useRef<HTMLInputElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [draft, setDraft] = useState<ReceiptDraft | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string>('');
 
-  useEffect(() => {
-    return () => {
-      if (imageUrl) URL.revokeObjectURL(imageUrl);
+  const processImage = (file: File) => {
+    setError('');
+
+    if (!file.type.startsWith('image/')) {
+      setError('Lütfen bir görüntü dosyası seçin.');
+      return;
+    }
+
+    if (file.size > 15 * 1024 * 1024) {
+      setError('Fiş fotoğrafı 15 MB'dan küçük olmalıdır.');
+      return;
+    }
+
+    setIsProcessing(true);
+
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const result = reader.result;
+
+      if (typeof result !== 'string') {
+        setError('Fotoğraf okunamadı.');
+        setIsProcessing(false);
+        return;
+      }
+
+      /*
+       * Görsel doğrudan base64/data URL olarak ReceiptPreview'a aktarılır.
+       * OCR işlemi server.ts tarafından yapılacaktır.
+       */
+      onReceiptScanned(result);
+      setIsProcessing(false);
     };
-  }, [imageUrl]);
 
-  const reset = () => {
-    if (imageUrl) URL.revokeObjectURL(imageUrl);
+    reader.onerror = () => {
+      setError('Fotoğraf okunurken bir hata oluştu.');
+      setIsProcessing(false);
+    };
 
-    setSelectedFile(null);
-    setImageUrl(null);
-    setDraft(null);
-    setError(null);
-    setIsAnalyzing(false);
-
-    if (inputRef.current) {
-      inputRef.current.value = "";
-    }
+    reader.readAsDataURL(file);
   };
 
-  const handleFile = (file?: File) => {
-    if (!file) return;
-
-    setError(null);
-    setDraft(null);
-
-    if (!file.type.startsWith("image/")) {
-      setError("Lütfen fişin fotoğrafını seç.");
-      return;
-    }
-
-    if (file.size > 10 * 1024 * 1024) {
-      setError("Fotoğraf 10 MB'dan küçük olmalı.");
-      return;
-    }
-
-    if (imageUrl) URL.revokeObjectURL(imageUrl);
-
-    setSelectedFile(file);
-    setImageUrl(URL.createObjectURL(file));
-  };
-
-  const fileToBase64 = (file: File) =>
-    new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-
-      reader.onload = () => {
-        const result = String(reader.result || "");
-        resolve(result);
-      };
-
-      reader.onerror = () =>
-        reject(new Error("Fotoğraf okunamadı."));
-      reader.readAsDataURL(file);
-    });
-
-  const analyzeReceipt = async () => {
-    if (!selectedFile) {
-      setError("Önce fiş fotoğrafını seç.");
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setError(null);
-
-    try {
-      const dataUrl = await fileToBase64(selectedFile);
-
-      const response = await fetch("/api/receipt/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          image: dataUrl,
-          mimeType: selectedFile.type,
-        }),
-      });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(
-          result?.error || `Sunucu ${response.status} döndürdü.`
-        );
-      }
-
-      if (!result?.receipt) {
-        throw new Error("Fiş analizi sonucu alınamadı.");
-      }
-
-      setDraft(result.receipt as ReceiptDraft);
-    } catch (err: any) {
-      console.error("Receipt scanner error:", err);
-      setError(
-        err?.message ||
-          "Fiş analiz edilirken bir sorun oluştu. Tekrar deneyin."
-      );
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
-  const handleConfirmed = (
-    expense: Omit<Expense, "id" | "createdAt">
+  const handleFileChange = (
+    event: React.ChangeEvent<HTMLInputElement>
   ) => {
-    onConfirmExpense(expense);
-    onClose();
-    reset();
-  };
+    const file = event.target.files?.[0];
 
-  if (draft) {
-    return (
-      <ReceiptPreview
-        receipt={draft}
-        imageUrl={imageUrl || undefined}
-        accounts={accounts}
-        creditCards={creditCards}
-        onCancel={() => setDraft(null)}
-        onConfirm={handleConfirmed}
-      />
-    );
-  }
+    if (file) {
+      processImage(file);
+    }
+
+    event.target.value = '';
+  };
 
   return (
-    <div className="fixed inset-0 z-[70] bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full sm:max-w-xl max-h-[94vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-extrabold text-slate-900">
-                Fişten Harcama Ekle
-              </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50">
+              <Receipt className="h-6 w-6 text-emerald-600" />
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Fotoğrafı gönder, CEBİ fişi okuyup taslak hazırlasın.
-            </p>
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Fiş Tara
+              </h2>
+              <p className="text-xs text-gray-500">
+                Fişi CEBİ okusun
+              </p>
+            </div>
           </div>
 
           <button
-            onClick={() => {
-              reset();
-              onClose();
-            }}
-            className="w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500"
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+            aria-label="Kapat"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
-          {!imageUrl ? (
-            <div className="rounded-3xl border-2 border-dashed border-slate-200 bg-slate-50 p-8 text-center">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-50 flex items-center justify-center mb-4">
-                <Camera className="w-8 h-8 text-emerald-600" />
-              </div>
-
-              <h3 className="font-extrabold text-slate-900">
-                Fiş fotoğrafını seç
-              </h3>
-
-              <p className="text-sm text-slate-500 mt-2 mb-5">
-                Telefonda kamerayı açabilir veya galeriden mevcut bir fiş
-                fotoğrafını seçebilirsin.
-              </p>
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => inputRef.current?.click()}
-                  className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold flex items-center justify-center gap-2"
-                >
-                  <Camera className="w-5 h-5" />
-                  Fotoğraf çek
-                </button>
-
-                <button
-                  onClick={() => inputRef.current?.click()}
-                  className="py-3 rounded-xl border border-slate-200 hover:bg-white text-slate-700 font-bold flex items-center justify-center gap-2"
-                >
-                  <ImageIcon className="w-5 h-5" />
-                  Galeriden seç
-                </button>
-              </div>
-
-              <input
-                ref={inputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/webp"
-                capture="environment"
-                onChange={(e) => handleFile(e.target.files?.[0])}
-                className="hidden"
-              />
+        {/* Content */}
+        <div className="p-5">
+          <div className="mb-5 rounded-2xl bg-gray-50 p-4 text-center">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100">
+              <Receipt className="h-8 w-8 text-emerald-600" />
             </div>
-          ) : (
-            <>
-              <div className="relative rounded-2xl overflow-hidden border border-slate-200 bg-slate-100">
-                <img
-                  src={imageUrl}
-                  alt="Fiş önizleme"
-                  className="w-full max-h-[55vh] object-contain"
-                />
 
-                <button
-                  onClick={reset}
-                  className="absolute top-3 right-3 w-10 h-10 rounded-xl bg-white/95 shadow flex items-center justify-center text-slate-700"
-                  title="Fotoğrafı değiştir"
-                >
-                  <RotateCcw className="w-5 h-5" />
-                </button>
-              </div>
+            <h3 className="font-semibold text-gray-900">
+              Fiş fotoğrafını seç
+            </h3>
 
-              <div className="flex items-center gap-2 text-xs text-slate-500">
-                <Upload className="w-4 h-4" />
-                <span>{selectedFile?.name}</span>
-              </div>
-
-              {error && (
-                <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-
-              <button
-                onClick={analyzeReceipt}
-                disabled={isAnalyzing}
-                className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 disabled:cursor-not-allowed text-white font-extrabold flex items-center justify-center gap-2"
-              >
-                {isAnalyzing ? (
-                  <>
-                    <Loader2 className="w-5 h-5 animate-spin" />
-                    Fiş okunuyor...
-                  </>
-                ) : (
-                  <>
-                    <Receipt className="w-5 h-5" />
-                    Fişi Oku
-                  </>
-                )}
-              </button>
-            </>
-          )}
-
-          {!imageUrl && error && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="rounded-2xl bg-slate-50 border border-slate-200 p-4">
-            <div className="text-xs font-bold text-slate-700 mb-2">
-              CEBİ güvenlik kuralı
-            </div>
-            <p className="text-xs leading-5 text-slate-500">
-              Gemini'nin okuduğu bilgi doğrudan kaydedilmez. Önce sana
-              gösterilir; işletme, tutar, tarih, kategori ve ödeme kaynağını
-              kontrol edip <strong>Onayla ve Kaydet</strong> dediğinde mevcut
-              harcama akışına gönderilir.
+            <p className="mt-1 text-sm text-gray-500">
+              CEBİ fişteki tutar, tarih ve ürün bilgilerini
+              otomatik olarak okuyacak.
             </p>
           </div>
+
+          {error && (
+            <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {isProcessing ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader2 className="mb-3 h-10 w-10 animate-spin text-emerald-600" />
+
+              <p className="font-medium text-gray-900">
+                Fotoğraf hazırlanıyor...
+              </p>
+
+              <p className="mt-1 text-sm text-gray-500">
+                Lütfen bekleyin.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* Camera */}
+              <button
+                type="button"
+                onClick={() => cameraInputRef.current?.click()}
+                className="flex w-full items-center gap-4 rounded-2xl bg-emerald-600 px-5 py-4 text-left text-white transition hover:bg-emerald-700 active:scale-[0.99]"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                  <Camera className="h-6 w-6" />
+                </div>
+
+                <div>
+                  <div className="font-semibold">
+                    Kamerayla Fiş Çek
+                  </div>
+
+                  <div className="text-xs text-emerald-100">
+                    Yeni bir fiş fotoğrafı çek
+                  </div>
+                </div>
+              </button>
+
+              {/* Gallery */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex w-full items-center gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-4 text-left text-gray-900 transition hover:bg-gray-50 active:scale-[0.99]"
+              >
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100">
+                  <ImageIcon className="h-6 w-6 text-gray-600" />
+                </div>
+
+                <div>
+                  <div className="font-semibold">
+                    Galeriden Seç
+                  </div>
+
+                  <div className="text-xs text-gray-500">
+                    Daha önce çekilmiş fiş fotoğrafını kullan
+                  </div>
+                </div>
+              </button>
+
+              {/* Upload */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-medium text-gray-500 transition hover:bg-gray-50 hover:text-gray-800"
+              >
+                <Upload className="h-4 w-4" />
+                Dosyadan yükle
+              </button>
+            </div>
+          )}
+
+          <p className="mt-5 text-center text-xs text-gray-400">
+            Daha doğru sonuç için fişin tamamının net ve okunabilir
+            olduğundan emin olun.
+          </p>
         </div>
+
+        {/* Hidden inputs */}
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          onChange={handleFileChange}
+          className="hidden"
+        />
+
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleFileChange}
+          className="hidden"
+        />
       </div>
     </div>
   );
 };
+
+export default ReceiptScanner;
