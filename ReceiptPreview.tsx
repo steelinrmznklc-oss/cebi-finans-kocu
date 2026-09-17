@@ -10,22 +10,24 @@ import {
 
 import { Expense, ExpenseCategory } from './finance';
 
-interface ReceiptApiResult {
-  receipt?: {
-    total?: number | null;
-    date?: string;
-    merchant?: string;
-    category?: ExpenseCategory;
-    categoryConfidence?: 'high' | 'medium' | 'low' | string;
-    notes?: string;
-    time?: string;
-    currency?: string;
-    payment?: unknown;
-    items?: unknown[];
-    needsUserConfirmation?: boolean;
-  };
+interface ReceiptData {
+  total?: number | null;
+  date?: string;
+  merchant?: string;
+  category?: ExpenseCategory;
+  categoryConfidence?: 'high' | 'medium' | 'low' | string;
+  notes?: string;
+  time?: string;
+  currency?: string;
+  payment?: unknown;
+  items?: unknown[];
+  needsUserConfirmation?: boolean;
+}
 
-  // Eski/fallback API yapısını da destekle.
+interface ReceiptApiResult {
+  receipt?: ReceiptData;
+
+  // Eski/fallback API yapısı
   amount?: number;
   date?: string;
   category?: ExpenseCategory;
@@ -86,21 +88,9 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
       setError('');
 
       try {
-        /*
-         * CEBİ'nin Render backend'i.
-         *
-         * API anahtarı burada bulunmaz.
-         * Gemini anahtarı yalnızca Render server tarafındadır.
-         */
         const apiBase =
           'https://cebi-finans-api.onrender.com';
 
-        /*
-         * Data URL içerisinden MIME tipini al.
-         *
-         * Örnek:
-         * data:image/jpeg;base64,...
-         */
         const mimeMatch = imageData.match(
           /^data:(image\/[^;]+);base64,/i
         );
@@ -108,11 +98,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         const mimeType =
           mimeMatch?.[1] || 'image/jpeg';
 
-        /*
-         * Render backend:
-         *
-         * POST /api/receipt/analyze
-         */
         const response = await fetch(
           `${apiBase}/api/receipt/analyze`,
           {
@@ -130,9 +115,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         const contentType =
           response.headers.get('content-type') || '';
 
-        /*
-         * HTTP hata durumları.
-         */
         if (!response.ok) {
           let message =
             `Fiş analiz sunucusu hata döndürdü (${response.status}).`;
@@ -149,25 +131,11 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
             } catch {
               // Varsayılan hata mesajı kullanılır.
             }
-          } else {
-            try {
-              const text = await response.text();
-
-              console.error(
-                'Receipt API returned non-JSON response:',
-                text.slice(0, 500)
-              );
-            } catch {
-              // Varsayılan hata mesajı korunur.
-            }
           }
 
           throw new Error(message);
         }
 
-        /*
-         * Başarılı cevap JSON olmalı.
-         */
         if (!contentType.includes('application/json')) {
           const text = await response.text();
 
@@ -187,7 +155,7 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
         if (cancelled) return;
 
         /*
-         * Güncel server şu yapıyı döndürüyor:
+         * Güncel server:
          *
          * {
          *   receipt: {
@@ -200,9 +168,18 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
          *   }
          * }
          *
-         * Eski düz yapı da destekleniyor.
+         * Eğer receipt varsa onu kullan.
+         * Yoksa eski düz API formatını dönüştür.
          */
-        const receipt = result.receipt ?? result;
+        const receipt: ReceiptData =
+          result.receipt ?? {
+            total: result.amount,
+            date: result.date,
+            merchant: result.merchant,
+            category: result.category,
+            categoryConfidence: undefined,
+            notes: result.note,
+          };
 
         /*
          * Tutar
@@ -216,15 +193,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
               .toFixed(2)
               .replace('.', ',')
           );
-        } else if (
-          typeof result.amount === 'number' &&
-          Number.isFinite(result.amount)
-        ) {
-          setAmount(
-            result.amount
-              .toFixed(2)
-              .replace('.', ',')
-          );
         }
 
         /*
@@ -232,8 +200,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
          */
         if (receipt.date) {
           setDate(receipt.date);
-        } else if (result.date) {
-          setDate(result.date);
         }
 
         /*
@@ -247,16 +213,8 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           )
         ) {
           setCategory(
-            receipt.category as ExpenseCategory
+            receipt.category
           );
-        } else if (
-          result.category &&
-          CATEGORY_OPTIONS.some(
-            (item) =>
-              item.value === result.category
-          )
-        ) {
-          setCategory(result.category);
         }
 
         /*
@@ -264,8 +222,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
          */
         if (receipt.merchant) {
           setMerchant(receipt.merchant);
-        } else if (result.merchant) {
-          setMerchant(result.merchant);
         }
 
         /*
@@ -273,20 +229,12 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
          */
         if (receipt.notes) {
           setNote(receipt.notes);
-        } else if (result.note) {
-          setNote(result.note);
         }
 
         /*
-         * Kategori güven seviyesini yüzdeye çevir.
-         *
-         * high   = %95
-         * medium = %75
-         * low    = %50
+         * Kategori güven seviyesi
          */
-        if (
-          receipt.categoryConfidence
-        ) {
+        if (receipt.categoryConfidence) {
           const confidenceMap: Record<
             string,
             number
@@ -306,19 +254,24 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
           if (mapped !== undefined) {
             setConfidence(mapped);
           }
-        } else if (
+        }
+
+        /*
+         * Eski API confidence alanı
+         */
+        if (
+          confidence === undefined &&
           typeof result.confidence === 'number'
         ) {
           setConfidence(result.confidence);
         }
 
         /*
-         * Server'dan hiçbir tutar gelmediyse
-         * kullanıcıya açık uyarı göster.
+         * Tutar okunamadıysa kullanıcıya bildir.
          */
         if (
-          typeof receipt.total !== 'number' &&
-          typeof result.amount !== 'number'
+          typeof receipt.total !== 'number' ||
+          !Number.isFinite(receipt.total)
         ) {
           setError(
             'Fiş okundu ancak toplam tutar belirlenemedi. Lütfen tutarı kontrol edin.'
@@ -352,13 +305,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   }, [imageData]);
 
   const parseAmount = (value: string): number => {
-    /*
-     * Türkçe para formatlarını destekler:
-     *
-     * 1.234,56
-     * 1234,56
-     * 1234.56
-     */
     const cleaned = value
       .replace(/[₺TLtl\s]/g, '')
       .trim();
@@ -426,9 +372,6 @@ const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
   };
 
   const handleRetry = () => {
-    /*
-     * Scanner'a geri dön.
-     */
     onClose();
   };
 
