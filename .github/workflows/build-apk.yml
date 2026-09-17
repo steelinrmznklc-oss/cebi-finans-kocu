@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - android-apk
   workflow_dispatch:
 
 jobs:
@@ -11,50 +12,110 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # ============================================================
+      # 1. Android APK branch'ini indir
+      # ============================================================
       - name: Android APK branch'ini indir
         uses: actions/checkout@v4
         with:
           ref: android-apk
 
+      # ============================================================
+      # 2. Node.js
+      # ============================================================
       - name: Node.js Kurulumu
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
 
+      # ============================================================
+      # 3. Bağımlılıkları yükle
+      # ============================================================
       - name: Bağımlılıkları Yükle
         run: npm install
 
+      # ============================================================
+      # 4. Tailwind Linux native paketini yükle
+      # ============================================================
       - name: Tailwind Linux native paketini yükle
         run: npm install @tailwindcss/oxide-linux-x64-gnu --save-dev
 
+      # ============================================================
+      # 5. TypeScript kontrolü
+      # ============================================================
       - name: TypeScript kontrolü
         run: npx tsc --noEmit
 
-      - name: Capacitor / Web Build Al
-        env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL }}
+      # ============================================================
+      # 6. Web uygulamasını Android için build et
+      #
+      # CAPACITOR_BUILD=true sayesinde Vite:
+      # ./ relative asset yollarını kullanır.
+      # ============================================================
+      - name: Web uygulamasını Android için build et
         run: CAPACITOR_BUILD=true npm run build
 
+      # ============================================================
+      # 7. Capacitor Android projesini oluştur
+      # ============================================================
       - name: Android projesini oluştur
         run: npx cap add android
 
+      # ============================================================
+      # 8. CEBİ launcher icon kaynağını hazırla
+      #
+      # Kaynak:
+      # public/cebi-icon.png
+      #
+      # Bu dosya tek kaynak olarak kullanılacak.
+      # ============================================================
+      - name: CEBİ icon kaynağını hazırla
+        run: |
+          mkdir -p resources
+          cp public/cebi-icon.png resources/icon.png
+
+      # ============================================================
+      # 9. Android launcher ikonlarını otomatik üret
+      #
+      # @capacitor/assets burada yalnızca build sırasında
+      # kullanılıyor. Repo'ya generated Android ikonlarını
+      # manuel olarak koymaya gerek yok.
+      # ============================================================
+      - name: CEBİ Android launcher ikonlarını oluştur
+        run: |
+          npx --yes @capacitor/assets generate --android
+
+      # ============================================================
+      # 10. Capacitor web dosyalarını Android'e aktar
+      # ============================================================
       - name: Capacitor sync
         run: npx cap sync android
 
+      # ============================================================
+      # 11. Java JDK
+      # ============================================================
       - name: Java JDK Kurulumu
         uses: actions/setup-java@v4
         with:
           distribution: zulu
           java-version: '21'
 
+      # ============================================================
+      # 12. Android APK Derle
+      # ============================================================
       - name: Android APK Derle
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
+      # ============================================================
+      # 13. APK artifact olarak yükle
+      # ============================================================
       - name: APK Dosyasını Yükle
         uses: actions/upload-artifact@v4
         with:
           name: cebi-release-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
