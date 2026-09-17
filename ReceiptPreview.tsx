@@ -8,7 +8,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 
-import { Expense, ExpenseCategory } from '../finance';
+import { Expense, ExpenseCategory } from './finance';
 
 interface ReceiptScanResult {
   amount?: number;
