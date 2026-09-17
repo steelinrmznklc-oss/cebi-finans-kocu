@@ -1,107 +1,80 @@
 import React, { useRef, useState } from 'react';
-import {
-  Camera,
-  Image as ImageIcon,
-  Upload,
-  X,
-  Loader2,
-  Receipt,
-  AlertCircle,
-} from 'lucide-react';
+import { Camera, Image as ImageIcon, X, Upload } from 'lucide-react';
 
 interface ReceiptScannerProps {
   onReceiptScanned: (imageData: string) => void;
   onClose: () => void;
 }
 
-const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
+const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15 MB
+
+export default function ReceiptScanner({
   onReceiptScanned,
   onClose,
-}) => {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+}: ReceiptScannerProps) {
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const galleryInputRef = useRef<HTMLInputElement | null>(null);
 
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [error, setError] = useState<string>('');
+  const [isReading, setIsReading] = useState(false);
+  const [error, setError] = useState('');
 
-  const processImage = (file: File) => {
+  const handleFile = (file: File | undefined) => {
+    if (!file) return;
+
     setError('');
 
     if (!file.type.startsWith('image/')) {
-      setError('Lütfen bir görüntü dosyası seçin.');
+      setError('Lütfen bir fotoğraf veya görsel dosyası seç.');
       return;
     }
 
-    if (file.size > 15 * 1024 * 1024) {
-      setError('Fiş fotoğrafı 15 MB'dan küçük olmalıdır.');
+    if (file.size > MAX_FILE_SIZE) {
+      setError('Fotoğraf boyutu en fazla 15 MB olabilir.');
       return;
     }
 
-    setIsProcessing(true);
+    setIsReading(true);
 
     const reader = new FileReader();
 
     reader.onload = () => {
       const result = reader.result;
 
-      if (typeof result !== 'string') {
+      if (typeof result === 'string') {
+        onReceiptScanned(result);
+      } else {
         setError('Fotoğraf okunamadı.');
-        setIsProcessing(false);
-        return;
       }
 
-      /*
-       * Görsel doğrudan base64/data URL olarak ReceiptPreview'a aktarılır.
-       * OCR işlemi server.ts tarafından yapılacaktır.
-       */
-      onReceiptScanned(result);
-      setIsProcessing(false);
+      setIsReading(false);
     };
 
     reader.onerror = () => {
       setError('Fotoğraf okunurken bir hata oluştu.');
-      setIsProcessing(false);
+      setIsReading(false);
     };
 
     reader.readAsDataURL(file);
   };
 
-  const handleFileChange = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-
-    if (file) {
-      processImage(file);
-    }
-
-    event.target.value = '';
-  };
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl bg-white shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50">
-              <Receipt className="h-6 w-6 text-emerald-600" />
-            </div>
-
-            <div>
-              <h2 className="text-lg font-bold text-gray-900">
-                Fiş Tara
-              </h2>
-              <p className="text-xs text-gray-500">
-                Fişi CEBİ okusun
-              </p>
-            </div>
+        <div className="flex items-center justify-between border-b border-slate-200 px-5 py-4">
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">
+              Fiş Tara
+            </h2>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Fişin fotoğrafını çek veya galeriden seç
+            </p>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
+            className="rounded-full p-2 text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
             aria-label="Kapat"
           >
             <X className="h-5 w-5" />
@@ -109,123 +82,113 @@ const ReceiptScanner: React.FC<ReceiptScannerProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-5">
-          <div className="mb-5 rounded-2xl bg-gray-50 p-4 text-center">
-            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100">
-              <Receipt className="h-8 w-8 text-emerald-600" />
+        <div className="space-y-4 p-5">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-6 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600">
+              <ReceiptIcon />
             </div>
 
-            <h3 className="font-semibold text-gray-900">
-              Fiş fotoğrafını seç
+            <h3 className="font-semibold text-slate-900">
+              Fiş fotoğrafını yükle
             </h3>
 
-            <p className="mt-1 text-sm text-gray-500">
-              CEBİ fişteki tutar, tarih ve ürün bilgilerini
-              otomatik olarak okuyacak.
+            <p className="mt-1 text-sm leading-5 text-slate-500">
+              CEBİ fişteki tutar, tarih ve kategori bilgilerini
+              otomatik olarak okumaya çalışacak.
             </p>
           </div>
 
           {error && (
-            <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
-              <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
-              <span>{error}</span>
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
             </div>
           )}
 
-          {isProcessing ? (
-            <div className="flex flex-col items-center justify-center py-8">
-              <Loader2 className="mb-3 h-10 w-10 animate-spin text-emerald-600" />
+          <div className="grid grid-cols-2 gap-3">
+            {/* Camera */}
+            <button
+              type="button"
+              disabled={isReading}
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex min-h-[110px] flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Camera className="h-7 w-7 text-emerald-600" />
+              <span className="text-sm font-semibold">
+                Kamerayla Çek
+              </span>
+            </button>
 
-              <p className="font-medium text-gray-900">
-                Fotoğraf hazırlanıyor...
-              </p>
+            {/* Gallery */}
+            <button
+              type="button"
+              disabled={isReading}
+              onClick={() => galleryInputRef.current?.click()}
+              className="flex min-h-[110px] flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-4 text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <ImageIcon className="h-7 w-7 text-emerald-600" />
+              <span className="text-sm font-semibold">
+                Galeriden Seç
+              </span>
+            </button>
+          </div>
 
-              <p className="mt-1 text-sm text-gray-500">
-                Lütfen bekleyin.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {/* Camera */}
-              <button
-                type="button"
-                onClick={() => cameraInputRef.current?.click()}
-                className="flex w-full items-center gap-4 rounded-2xl bg-emerald-600 px-5 py-4 text-left text-white transition hover:bg-emerald-700 active:scale-[0.99]"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
-                  <Camera className="h-6 w-6" />
-                </div>
-
-                <div>
-                  <div className="font-semibold">
-                    Kamerayla Fiş Çek
-                  </div>
-
-                  <div className="text-xs text-emerald-100">
-                    Yeni bir fiş fotoğrafı çek
-                  </div>
-                </div>
-              </button>
-
-              {/* Gallery */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full items-center gap-4 rounded-2xl border border-gray-200 bg-white px-5 py-4 text-left text-gray-900 transition hover:bg-gray-50 active:scale-[0.99]"
-              >
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-gray-100">
-                  <ImageIcon className="h-6 w-6 text-gray-600" />
-                </div>
-
-                <div>
-                  <div className="font-semibold">
-                    Galeriden Seç
-                  </div>
-
-                  <div className="text-xs text-gray-500">
-                    Daha önce çekilmiş fiş fotoğrafını kullan
-                  </div>
-                </div>
-              </button>
-
-              {/* Upload */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex w-full items-center justify-center gap-2 rounded-2xl py-3 text-sm font-medium text-gray-500 transition hover:bg-gray-50 hover:text-gray-800"
-              >
-                <Upload className="h-4 w-4" />
-                Dosyadan yükle
-              </button>
+          {isReading && (
+            <div className="flex items-center justify-center gap-2 rounded-xl bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent" />
+              Fotoğraf hazırlanıyor...
             </div>
           )}
 
-          <p className="mt-5 text-center text-xs text-gray-400">
-            Daha doğru sonuç için fişin tamamının net ve okunabilir
-            olduğundan emin olun.
-          </p>
+          <div className="flex items-center gap-2 text-xs text-slate-400">
+            <Upload className="h-4 w-4" />
+            <span>Desteklenen formatlar: JPG, PNG, WEBP</span>
+          </div>
         </div>
 
-        {/* Hidden inputs */}
+        {/* Hidden file inputs */}
         <input
           ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
-          onChange={handleFileChange}
           className="hidden"
+          onChange={(event) => {
+            handleFile(event.target.files?.[0]);
+            event.target.value = '';
+          }}
         />
 
         <input
-          ref={fileInputRef}
+          ref={galleryInputRef}
           type="file"
           accept="image/*"
-          onChange={handleFileChange}
           className="hidden"
+          onChange={(event) => {
+            handleFile(event.target.files?.[0]);
+            event.target.value = '';
+          }}
         />
       </div>
     </div>
   );
-};
+}
 
-export default ReceiptScanner;
+function ReceiptIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-8 w-8"
+      aria-hidden="true"
+    >
+      <path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z" />
+      <path d="M9 7h6" />
+      <path d="M9 11h6" />
+      <path d="M9 15h4" />
+    </svg>
+  );
+}
