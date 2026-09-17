@@ -1,498 +1,463 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useState } from 'react';
 import {
-  AlertTriangle,
-  CheckCircle2,
-  CreditCard as CreditCardIcon,
-  Pencil,
-  Receipt,
-  Store,
-  Wallet,
   X,
-} from "lucide-react";
-import {
-  BankAccount,
-  CreditCard,
-  Expense,
-  ExpenseCategory,
-} from "./finance";
+  Check,
+  Loader2,
+  Receipt,
+  AlertCircle,
+  RotateCcw,
+} from 'lucide-react';
 
-export interface ReceiptItem {
-  name: string;
-  quantity: number;
-  total: number;
-}
+import { Expense, ExpenseCategory } from '../finance';
 
-export interface ReceiptPayment {
-  bank: string | null;
-  type: "credit_card" | "bank_account" | "cash" | "unknown";
-  last4: string | null;
-  confidence: "high" | "medium" | "low";
-}
-
-export interface ReceiptDraft {
-  merchant: string | null;
-  date: string | null;
-  time: string | null;
-  total: number | null;
-  currency: "TRY";
-  category: ExpenseCategory;
-  categoryConfidence: "high" | "medium" | "low";
-  payment: ReceiptPayment;
-  items: ReceiptItem[];
-  notes: string | null;
-  needsUserConfirmation: boolean;
+interface ReceiptScanResult {
+  amount?: number;
+  date?: string;
+  category?: ExpenseCategory;
+  merchant?: string;
+  note?: string;
+  confidence?: number;
+  rawText?: string;
 }
 
 interface ReceiptPreviewProps {
-  receipt: ReceiptDraft;
-  imageUrl?: string;
-  accounts: BankAccount[];
-  creditCards: CreditCard[];
-  onCancel: () => void;
-  onConfirm: (expense: Omit<Expense, "id" | "createdAt">) => void;
+  imageData: string;
+  onConfirm: (expense: Expense) => void;
+  onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
-  market: "Market",
-  yemek: "Yemek",
-  ulasim: "Ulaşım",
-  fatura: "Fatura",
-  kira: "Kira",
-  alisveris: "Alışveriş",
-  saglik: "Sağlık",
-  eglence: "Eğlence",
-  abonelik: "Abonelik",
-  egitim: "Eğitim",
-  diger: "Diğer",
-};
+const CATEGORY_OPTIONS: {
+  value: ExpenseCategory;
+  label: string;
+}[] = [
+  { value: 'market', label: 'Market' },
+  { value: 'yemek', label: 'Yemek' },
+  { value: 'ulasim', label: 'Ulaşım' },
+  { value: 'fatura', label: 'Fatura' },
+  { value: 'kira', label: 'Kira' },
+  { value: 'alisveris', label: 'Alışveriş' },
+  { value: 'saglik', label: 'Sağlık' },
+  { value: 'eglence', label: 'Eğlence' },
+  { value: 'abonelik', label: 'Abonelik' },
+  { value: 'egitim', label: 'Eğitim' },
+  { value: 'diger', label: 'Diğer' },
+];
 
-function formatTRY(value: number | null) {
-  if (value === null || !Number.isFinite(value)) return "—";
-
-  return `${value.toLocaleString("tr-TR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })} ₺`;
-}
-
-function confidenceLabel(value: "high" | "medium" | "low") {
-  if (value === "high") return "Yüksek güven";
-  if (value === "medium") return "Orta güven";
-  return "Kontrol et";
-}
-
-export const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
-  receipt,
-  imageUrl,
-  accounts,
-  creditCards,
-  onCancel,
+const ReceiptPreview: React.FC<ReceiptPreviewProps> = ({
+  imageData,
   onConfirm,
+  onClose,
 }) => {
-  const [merchant, setMerchant] = React.useState(receipt.merchant || "");
-  const [amount, setAmount] = React.useState(
-    receipt.total !== null ? String(receipt.total) : ""
-  );
-  const [date, setDate] = React.useState(receipt.date || "");
-  const [category, setCategory] = React.useState<ExpenseCategory>(
-    receipt.category || "diger"
-  );
+  const [isScanning, setIsScanning] = useState(true);
+  const [error, setError] = useState('');
 
-  // "cash", account id, or card id.
-  const [paymentSourceId, setPaymentSourceId] = React.useState(
-    receipt.payment.type === "cash" ? "cash" : ""
-  );
+  const [amount, setAmount] = useState('');
+  const [date, setDate] = useState('');
+  const [category, setCategory] =
+    useState<ExpenseCategory>('market');
+  const [merchant, setMerchant] = useState('');
+  const [note, setNote] = useState('');
+  const [confidence, setConfidence] = useState<number | undefined>();
 
-  const [paymentSourceType, setPaymentSourceType] = React.useState<
-    "bank_account" | "credit_card" | "nakit"
-  >(
-    receipt.payment.type === "credit_card"
-      ? "credit_card"
-      : receipt.payment.type === "bank_account"
-        ? "bank_account"
-        : "nakit"
-  );
+  /*
+   * Server OCR sonucunu almak için backend endpoint'i.
+   *
+   * server.ts tarafındaki /api/receipt-scan endpoint'i
+   * aşağıdaki yapıya uygun JSON döndürmelidir:
+   *
+   * {
+   *   amount,
+   *   date,
+   *   category,
+   *   merchant,
+   *   note,
+   *   confidence,
+   *   rawText
+   * }
+   */
+  useEffect(() => {
+    let cancelled = false;
 
-  const [error, setError] = React.useState<string | null>(null);
+    const scanReceipt = async () => {
+      setIsScanning(true);
+      setError('');
 
-  const suggestedCards = useMemo(() => {
-    if (!receipt.payment.bank && !receipt.payment.last4) return [];
+      try {
+        const response = await fetch('/api/receipt-scan', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            image: imageData,
+          }),
+        });
 
-    return creditCards.filter((card) => {
-      const bankMatches = receipt.payment.bank
-        ? card.bank.toLocaleLowerCase("tr-TR").includes(
-            receipt.payment.bank!.toLocaleLowerCase("tr-TR")
-          ) ||
-          receipt.payment.bank!
-            .toLocaleLowerCase("tr-TR")
-            .includes(card.bank.toLocaleLowerCase("tr-TR"))
-        : true;
+        if (!response.ok) {
+          let message = 'Fiş okunamadı.';
 
-      // Current CreditCard model does not contain last4, so last4 is
-      // intentionally only displayed as a clue, never used for auto-selection.
-      return bankMatches;
-    });
-  }, [creditCards, receipt.payment.bank, receipt.payment.last4]);
+          try {
+            const errorData = await response.json();
 
-  const paymentDisplay = useMemo(() => {
-    if (paymentSourceType === "nakit") return "Nakit";
+            if (errorData?.error) {
+              message = errorData.error;
+            }
+          } catch {
+            // JSON değilse varsayılan hata mesajı kullanılır.
+          }
 
-    if (paymentSourceType === "bank_account") {
-      const account = accounts.find((a) => a.id === paymentSourceId);
-      return account
-        ? `${account.bankName} — ${account.accountName}`
-        : "Banka hesabı seç";
+          throw new Error(message);
+        }
+
+        const result: ReceiptScanResult =
+          await response.json();
+
+        if (cancelled) return;
+
+        if (
+          typeof result.amount === 'number' &&
+          Number.isFinite(result.amount)
+        ) {
+          setAmount(
+            result.amount.toFixed(2).replace('.', ',')
+          );
+        }
+
+        if (result.date) {
+          setDate(result.date);
+        }
+
+        if (
+          result.category &&
+          CATEGORY_OPTIONS.some(
+            (item) => item.value === result.category
+          )
+        ) {
+          setCategory(result.category);
+        }
+
+        if (result.merchant) {
+          setMerchant(result.merchant);
+        }
+
+        if (result.note) {
+          setNote(result.note);
+        }
+
+        if (typeof result.confidence === 'number') {
+          setConfidence(result.confidence);
+        }
+      } catch (scanError) {
+        if (cancelled) return;
+
+        console.error(
+          'Receipt scan error:',
+          scanError
+        );
+
+        setError(
+          scanError instanceof Error
+            ? scanError.message
+            : 'Fiş okunurken bir hata oluştu.'
+        );
+      } finally {
+        if (!cancelled) {
+          setIsScanning(false);
+        }
+      }
+    };
+
+    scanReceipt();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageData]);
+
+  const parseAmount = (value: string): number => {
+    /*
+     * Türkçe para formatlarını destekler:
+     * 1.234,56
+     * 1234,56
+     * 1234.56
+     */
+    const cleaned = value
+      .replace(/[₺TLtl\s]/g, '')
+      .trim();
+
+    if (!cleaned) return 0;
+
+    if (
+      cleaned.includes('.') &&
+      cleaned.includes(',')
+    ) {
+      return Number(
+        cleaned.replace(/\./g, '').replace(',', '.')
+      );
     }
 
-    const card = creditCards.find((c) => c.id === paymentSourceId);
-    return card ? `${card.bank} — ${card.cardName}` : "Kredi kartı seç";
-  }, [
-    accounts,
-    creditCards,
-    paymentSourceId,
-    paymentSourceType,
-  ]);
+    if (cleaned.includes(',')) {
+      return Number(cleaned.replace(',', '.'));
+    }
+
+    return Number(cleaned);
+  };
 
   const handleConfirm = () => {
-    setError(null);
+    const parsedAmount = parseAmount(amount);
 
-    const normalizedAmount = Number(
-      String(amount).replace(/\./g, "").replace(",", ".")
-    );
-
-    if (!Number.isFinite(normalizedAmount) || normalizedAmount <= 0) {
-      setError("Geçerli bir toplam tutar gir.");
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) {
+      setError('Geçerli bir fiş tutarı girin.');
       return;
     }
 
     if (!date) {
-      setError("Fiş tarihini kontrol et.");
+      setError('Fiş tarihini girin.');
       return;
     }
 
-    if (!paymentSourceId) {
-      setError("Ödemenin hangi CEBİ hesabından yapıldığını seç.");
-      return;
-    }
-
-    const selectedAccount = accounts.find((a) => a.id === paymentSourceId);
-    const selectedCard = creditCards.find((c) => c.id === paymentSourceId);
-
-    const paymentSourceName =
-      paymentSourceType === "nakit"
-        ? "Nakit"
-        : paymentSourceType === "bank_account"
-          ? selectedAccount
-            ? `${selectedAccount.bankName} — ${selectedAccount.accountName}`
-            : "Banka Hesabı"
-          : selectedCard
-            ? `${selectedCard.bank} — ${selectedCard.cardName}`
-            : "Kredi Kartı";
-
-    const expense: Omit<Expense, "id" | "createdAt"> = {
-      amount: normalizedAmount,
+    const expense: Expense = {
+      id: crypto.randomUUID(),
+      amount: parsedAmount,
       category,
       date,
-      paymentSourceId: paymentSourceId === "cash" ? undefined : paymentSourceId,
-      paymentSourceName,
-      paymentSourceType,
-      note: merchant.trim() || "Fişten eklenen harcama",
+      paymentSourceId: undefined,
+      paymentSourceName: undefined,
+      paymentSourceType: 'diger',
+      note:
+        note.trim() ||
+        (merchant.trim()
+          ? `${merchant.trim()} fiş`
+          : 'Fişten eklenen harcama'),
       isDebtPayment: false,
+      relatedDebtType: undefined,
+      relatedDebtId: undefined,
+      createdAt: new Date().toISOString(),
     };
 
     onConfirm(expense);
   };
 
+  const handleRetry = () => {
+    /*
+     * imageData değişmediği için component yeniden tarama
+     * yapmaz. Kullanıcıya Scanner'a geri dönmek için kapatıyoruz.
+     */
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-[80] bg-slate-950/60 backdrop-blur-sm flex items-end sm:items-center justify-center p-0 sm:p-4">
-      <div className="w-full sm:max-w-2xl max-h-[94vh] overflow-y-auto bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200">
-        <div className="sticky top-0 z-10 bg-white/95 backdrop-blur border-b border-slate-100 px-5 py-4 flex items-center justify-between">
-          <div>
-            <div className="flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-emerald-600" />
-              <h2 className="font-extrabold text-slate-900">
-                Fişi böyle okudum
-              </h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="relative flex max-h-[95vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl">
+        {/* Header */}
+        <div className="flex shrink-0 items-center justify-between border-b border-gray-100 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50">
+              <Receipt className="h-6 w-6 text-emerald-600" />
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Kaydetmeden önce bilgileri kontrol et.
-            </p>
+
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">
+                Fiş Önizleme
+              </h2>
+
+              <p className="text-xs text-gray-500">
+                Bilgileri kontrol et ve kaydet
+              </p>
+            </div>
           </div>
 
           <button
-            onClick={onCancel}
-            className="w-9 h-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500"
+            type="button"
+            onClick={onClose}
+            className="rounded-full p-2 text-gray-400 transition hover:bg-gray-100 hover:text-gray-700"
             aria-label="Kapat"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-5">
-          {imageUrl && (
-            <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
-              <img
-                src={imageUrl}
-                alt="Yüklenen fiş"
-                className="w-full max-h-72 object-contain"
-              />
-            </div>
-          )}
+        {/* Body */}
+        <div className="min-h-0 overflow-y-auto">
+          <div className="grid gap-5 p-5 md:grid-cols-2">
+            {/* Receipt Image */}
+            <div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-semibold text-gray-700">
+                  Fiş Fotoğrafı
+                </span>
 
-          <div className="rounded-2xl bg-emerald-50 border border-emerald-100 p-4">
-            <div className="flex items-center gap-2 text-emerald-800 font-bold text-sm">
-              <CheckCircle2 className="w-4 h-4" />
-              Gemini fişi analiz etti
-            </div>
+                {confidence !== undefined && (
+                  <span className="text-xs text-gray-400">
+                    Güven: %{Math.round(confidence * 100)}
+                  </span>
+                )}
+              </div>
 
-            {receipt.notes && (
-              <p className="mt-2 text-xs text-emerald-800">
-                Not: {receipt.notes}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="text-xs font-bold text-slate-600">
-                İşletme
-              </span>
-              <div className="relative mt-1.5">
-                <Store className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <input
-                  value={merchant}
-                  onChange={(e) => setMerchant(e.target.value)}
-                  className="w-full pl-9 pr-3 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"
-                  placeholder="BİM, Migros..."
+              <div className="overflow-hidden rounded-2xl border border-gray-200 bg-gray-50">
+                <img
+                  src={imageData}
+                  alt="Taranan fiş"
+                  className="max-h-[55vh] w-full object-contain"
                 />
               </div>
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-600">
-                Toplam
-              </span>
-              <input
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                inputMode="decimal"
-                className="mt-1.5 w-full px-3 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500 font-extrabold"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-600">
-                Tarih
-              </span>
-              <input
-                type="date"
-                value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="mt-1.5 w-full px-3 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-600">
-                Kategori
-              </span>
-              <select
-                value={category}
-                onChange={(e) =>
-                  setCategory(e.target.value as ExpenseCategory)
-                }
-                className="mt-1.5 w-full px-3 py-3 rounded-xl border border-slate-200 outline-none focus:border-emerald-500"
-              >
-                {Object.entries(CATEGORY_LABELS).map(([key, label]) => (
-                  <option key={key} value={key}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <div className="rounded-2xl border border-slate-200 p-4">
-            <div className="flex items-start justify-between gap-3 mb-3">
-              <div>
-                <div className="text-sm font-bold text-slate-900">
-                  Ödeme kaynağı
-                </div>
-                <div className="text-xs text-slate-500 mt-1">
-                  Fişten görülen bilgi sadece öneridir. CEBİ hesabını sen
-                  seçiyorsun.
-                </div>
-              </div>
-
-              <Wallet className="w-5 h-5 text-slate-400" />
             </div>
 
-            {receipt.payment.bank || receipt.payment.last4 ? (
-              <div className="mb-3 p-3 rounded-xl bg-amber-50 border border-amber-100 text-xs text-amber-800">
-                <div className="flex items-center gap-2 font-bold">
-                  <AlertTriangle className="w-4 h-4" />
-                  Fişten görülen ödeme bilgisi
-                </div>
-                <div className="mt-1">
-                  {receipt.payment.bank || "Banka okunamadı"}
-                  {receipt.payment.last4
-                    ? ` •••• ${receipt.payment.last4}`
-                    : ""}
-                  {" — "}
-                  {confidenceLabel(receipt.payment.confidence)}
-                </div>
-              </div>
-            ) : null}
+            {/* Form */}
+            <div>
+              {isScanning && (
+                <div className="mb-4 flex items-center gap-3 rounded-2xl bg-emerald-50 p-4">
+                  <Loader2 className="h-5 w-5 animate-spin text-emerald-600" />
 
-            {suggestedCards.length > 0 && (
-              <div className="mb-3 text-xs text-slate-500">
-                Yapılandırılmış CEBİ kartlarından banka eşleşmesi bulundu;
-                yine de otomatik seçim yapılmadı.
-              </div>
-            )}
+                  <div>
+                    <p className="text-sm font-semibold text-emerald-900">
+                      Fiş okunuyor...
+                    </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
-              <button
-                onClick={() => {
-                  setPaymentSourceType("nakit");
-                  setPaymentSourceId("cash");
-                }}
-                className={`p-3 rounded-xl border text-left ${
-                  paymentSourceType === "nakit"
-                    ? "border-emerald-500 bg-emerald-50"
-                    : "border-slate-200"
-                }`}
-              >
-                <Wallet className="w-4 h-4 mb-1 text-slate-500" />
-                <div className="text-xs font-bold">Nakit</div>
-              </button>
-
-              <button
-                onClick={() => {
-                  setPaymentSourceType("bank_account");
-                  setPaymentSourceId("");
-                }}
-                className={`p-3 rounded-xl border text-left ${
-                  paymentSourceType === "bank_account"
-                    ? "border-emerald-500 bg-emerald-50"
-                    : "border-slate-200"
-                }`}
-              >
-                <Wallet className="w-4 h-4 mb-1 text-slate-500" />
-                <div className="text-xs font-bold">Banka hesabı</div>
-              </button>
-
-              <button
-                onClick={() => {
-                  setPaymentSourceType("credit_card");
-                  setPaymentSourceId("");
-                }}
-                className={`p-3 rounded-xl border text-left ${
-                  paymentSourceType === "credit_card"
-                    ? "border-emerald-500 bg-emerald-50"
-                    : "border-slate-200"
-                }`}
-              >
-                <CreditCardIcon className="w-4 h-4 mb-1 text-slate-500" />
-                <div className="text-xs font-bold">Kredi kartı</div>
-              </button>
-            </div>
-
-            {paymentSourceType === "bank_account" && (
-              <select
-                value={paymentSourceId}
-                onChange={(e) => setPaymentSourceId(e.target.value)}
-                className="w-full px-3 py-3 rounded-xl border border-slate-200"
-              >
-                <option value="">Banka hesabı seç...</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.bankName} — {account.accountName}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            {paymentSourceType === "credit_card" && (
-              <select
-                value={paymentSourceId}
-                onChange={(e) => setPaymentSourceId(e.target.value)}
-                className="w-full px-3 py-3 rounded-xl border border-slate-200"
-              >
-                <option value="">Kredi kartı seç...</option>
-                {creditCards.map((card) => (
-                  <option key={card.id} value={card.id}>
-                    {card.bank} — {card.cardName}
-                  </option>
-                ))}
-              </select>
-            )}
-
-            <div className="mt-3 text-xs text-slate-500">
-              Seçilen kaynak:{" "}
-              <span className="font-bold text-slate-700">
-                {paymentDisplay}
-              </span>
-            </div>
-          </div>
-
-          {receipt.items.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="font-bold text-sm text-slate-900">
-                  Okunan ürünler
-                </div>
-                <Pencil className="w-4 h-4 text-slate-400" />
-              </div>
-
-              <div className="divide-y divide-slate-100">
-                {receipt.items.map((item, index) => (
-                  <div
-                    key={`${item.name}-${index}`}
-                    className="py-2.5 flex items-center justify-between gap-3"
-                  >
-                    <div className="min-w-0">
-                      <div className="text-sm text-slate-800 truncate">
-                        {item.name}
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        Adet: {item.quantity}
-                      </div>
-                    </div>
-
-                    <div className="text-sm font-bold text-slate-800">
-                      {formatTRY(item.total)}
-                    </div>
+                    <p className="text-xs text-emerald-700">
+                      Tutar, tarih ve kategori belirleniyor.
+                    </p>
                   </div>
-                ))}
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-4 flex items-start gap-3 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-700">
+                  <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div className="space-y-4">
+                {/* Amount */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Toplam Tutar
+                  </label>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      value={amount}
+                      onChange={(e) =>
+                        setAmount(e.target.value)
+                      }
+                      placeholder="0,00"
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 pr-10 text-lg font-semibold outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                    />
+
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
+                      ₺
+                    </span>
+                  </div>
+                </div>
+
+                {/* Date */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Tarih
+                  </label>
+
+                  <input
+                    type="date"
+                    value={date}
+                    onChange={(e) =>
+                      setDate(e.target.value)
+                    }
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+
+                {/* Merchant */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    İşletme / Market
+                  </label>
+
+                  <input
+                    type="text"
+                    value={merchant}
+                    onChange={(e) =>
+                      setMerchant(e.target.value)
+                    }
+                    placeholder="Örn. Migros"
+                    className="w-full rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
+
+                {/* Category */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Kategori
+                  </label>
+
+                  <select
+                    value={category}
+                    onChange={(e) =>
+                      setCategory(
+                        e.target.value as ExpenseCategory
+                      )
+                    }
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  >
+                    {CATEGORY_OPTIONS.map((item) => (
+                      <option
+                        key={item.value}
+                        value={item.value}
+                      >
+                        {item.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Note */}
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Not
+                  </label>
+
+                  <textarea
+                    value={note}
+                    onChange={(e) =>
+                      setNote(e.target.value)
+                    }
+                    rows={3}
+                    placeholder="İstersen fişle ilgili not ekle..."
+                    className="w-full resize-none rounded-xl border border-gray-200 px-4 py-3 outline-none transition focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+                  />
+                </div>
               </div>
             </div>
-          )}
-
-          {error && (
-            <div className="p-3 rounded-xl bg-red-50 border border-red-100 text-sm text-red-700">
-              {error}
-            </div>
-          )}
-
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <button
-              onClick={onCancel}
-              className="py-3 rounded-xl border border-slate-200 text-slate-700 font-bold hover:bg-slate-50"
-            >
-              Vazgeç
-            </button>
-
-            <button
-              onClick={handleConfirm}
-              className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold flex items-center justify-center gap-2"
-            >
-              <CheckCircle2 className="w-5 h-5" />
-              Onayla ve Kaydet
-            </button>
           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex shrink-0 flex-col gap-3 border-t border-gray-100 bg-white px-5 py-4 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="flex items-center justify-center gap-2 rounded-xl border border-gray-200 px-5 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Yeniden Tara
+          </button>
+
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={isScanning}
+            className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Check className="h-4 w-4" />
+            Harcamayı Kaydet
+          </button>
         </div>
       </div>
     </div>
   );
 };
+
+export default ReceiptPreview;
