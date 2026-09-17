@@ -72,14 +72,88 @@ type DebtModalType = 'card' | 'loan' | 'kmh' | 'other';
 const CEBI_NAVY = '#0B1F33';
 const CEBI_GREEN = '#10B981';
 
+/**
+ * Türkçe kullanıcı girişlerini daha güvenli şekilde sayıya çevirir.
+ *
+ * Örnek:
+ * 5.000       -> 5000
+ * 5.000,50    -> 5000.50
+ * 5000,50     -> 5000.50
+ * 5000.50     -> 5000.50
+ */
+function parseMoney(value: string): number {
+  if (!value) return 0;
+
+  let normalized = value
+    .trim()
+    .replace(/\s/g, '')
+    .replace(/₺/gi, '');
+
+  if (!normalized) return 0;
+
+  const hasComma = normalized.includes(',');
+  const hasDot = normalized.includes('.');
+
+  if (hasComma && hasDot) {
+    const lastComma = normalized.lastIndexOf(',');
+    const lastDot = normalized.lastIndexOf('.');
+
+    if (lastComma > lastDot) {
+      // 5.000,50
+      normalized = normalized
+        .replace(/\./g, '')
+        .replace(',', '.');
+    } else {
+      // 5,000.50
+      normalized = normalized.replace(/,/g, '');
+    }
+  } else if (hasComma) {
+    // 5000,50
+    normalized = normalized.replace(',', '.');
+  } else if (hasDot) {
+    const parts = normalized.split('.');
+
+    // 5.000 gibi tam sayı binlik gösterimiyse
+    if (
+      parts.length === 2 &&
+      parts[1].length === 3 &&
+      /^\d+$/.test(parts[0]) &&
+      /^\d+$/.test(parts[1])
+    ) {
+      normalized = normalized.replace('.', '');
+    }
+  }
+
+  const result = Number(normalized);
+
+  return Number.isFinite(result) ? result : 0;
+}
+
+function parseInteger(value: string): number {
+  if (!value) return 0;
+
+  const normalized = value
+    .trim()
+    .replace(/\./g, '')
+    .replace(/,/g, '');
+
+  const result = Number.parseInt(normalized, 10);
+
+  return Number.isFinite(result) ? result : 0;
+}
+
+function safeNumber(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, value) : 0;
+}
+
 const inputClass =
-  'w-full rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#10B981] focus:bg-white focus:ring-4 focus:ring-emerald-500/10';
+  'w-full min-w-0 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#10B981] focus:bg-white focus:ring-4 focus:ring-emerald-500/10';
 
 const labelClass =
   'mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-500';
 
 const actionButtonClass =
-  'inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition cursor-pointer';
+  'inline-flex min-w-0 items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold transition cursor-pointer';
 
 export function DebtsView({
   creditCards,
@@ -126,8 +200,115 @@ export function DebtsView({
     statementDebt?: number;
   } | null>(null);
 
-  const [paymentAmount, setPaymentAmount] = useState<string>('');
-  const [paymentAccountId, setPaymentAccountId] = useState<string>('');
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentAccountId, setPaymentAccountId] = useState('');
+
+  const [formBank, setFormBank] = useState('Ziraat Bankası');
+  const [formName, setFormName] = useState('');
+  const [formLimit, setFormLimit] = useState('');
+  const [formAvailable, setFormAvailable] = useState('');
+  const [formCurrentDebt, setFormCurrentDebt] = useState('');
+  const [formStatementDebt, setFormStatementDebt] = useState('');
+  const [formMinPayment, setFormMinPayment] = useState('');
+  const [formDueDate, setFormDueDate] = useState('');
+  const [formOriginalAmount, setFormOriginalAmount] = useState('');
+  const [formInstallment, setFormInstallment] = useState('');
+  const [formRemainingCount, setFormRemainingCount] = useState('');
+  const [formInterestRate, setFormInterestRate] = useState('5.0');
+  const [formDesc, setFormDesc] = useState('');
+
+  const closeAllModals = () => {
+    setOpenModalType(null);
+    setEditingItem(null);
+    setPayingDebt(null);
+  };
+
+  const resetForm = () => {
+    setFormBank('Ziraat Bankası');
+    setFormName('');
+    setFormLimit('');
+    setFormAvailable('');
+    setFormCurrentDebt('');
+    setFormStatementDebt('');
+    setFormMinPayment('');
+    setFormDueDate('');
+    setFormOriginalAmount('');
+    setFormInstallment('');
+    setFormRemainingCount('');
+    setFormInterestRate('5.0');
+    setFormDesc('');
+  };
+
+  const openAddModal = (type: DebtModalType) => {
+    resetForm();
+    setEditingItem(null);
+    setOpenModalType(type);
+  };
+
+  const openEditCard = (card: CreditCard) => {
+    setEditingItem({
+      type: 'card',
+      data: card,
+    });
+
+    setFormBank(card.bank || 'Ziraat Bankası');
+    setFormName(card.cardName || '');
+    setFormLimit(String(card.limit ?? ''));
+    setFormAvailable(String(card.availableLimit ?? ''));
+    setFormCurrentDebt(String(card.currentDebt ?? ''));
+    setFormStatementDebt(String(card.statementDebt ?? ''));
+    setFormMinPayment(String(card.minimumPayment ?? ''));
+    setFormDueDate(card.paymentDueDate || '');
+
+    setOpenModalType('card');
+  };
+
+  const openEditLoan = (loan: Loan) => {
+    setEditingItem({
+      type: 'loan',
+      data: loan,
+    });
+
+    setFormBank(loan.bank || 'Ziraat Bankası');
+    setFormName(loan.loanName || '');
+    setFormOriginalAmount(String(loan.originalAmount ?? ''));
+    setFormCurrentDebt(String(loan.remainingPrincipal ?? ''));
+    setFormInstallment(String(loan.monthlyInstallment ?? ''));
+    setFormRemainingCount(String(loan.remainingInstallments ?? ''));
+    setFormDueDate(loan.nextPaymentDate || '');
+
+    setOpenModalType('loan');
+  };
+
+  const openEditKmh = (kmh: Overdraft) => {
+    setEditingItem({
+      type: 'kmh',
+      data: kmh,
+    });
+
+    setFormBank(kmh.bank || 'Ziraat Bankası');
+    setFormName(kmh.accountName || '');
+    setFormLimit(String(kmh.limit ?? ''));
+    setFormCurrentDebt(String(kmh.usedAmount ?? ''));
+    setFormInterestRate(String(kmh.interestRate ?? 5));
+    setFormDueDate(kmh.paymentDate || '');
+
+    setOpenModalType('kmh');
+  };
+
+  const openEditOtherDebt = (debt: OtherDebt) => {
+    setEditingItem({
+      type: 'other',
+      data: debt,
+    });
+
+    setFormName(debt.debtName || '');
+    setFormCurrentDebt(String(debt.amount ?? ''));
+    setFormDueDate(debt.dueDate || '');
+    setFormDesc(debt.description || '');
+
+    setOpenModalType('other');
+  };
 
   const openPayModal = (
     type: 'card' | 'loan' | 'kmh' | 'other',
@@ -146,9 +327,13 @@ export function DebtsView({
       statementDebt,
     });
 
-    let initialAmount = currentDebtOrAmount;
+    let initialAmount = safeNumber(currentDebtOrAmount);
 
-    if (type === 'loan' && minOrInstallment && minOrInstallment > 0) {
+    if (
+      type === 'loan' &&
+      minOrInstallment &&
+      minOrInstallment > 0
+    ) {
       initialAmount = minOrInstallment;
     } else if (type === 'card') {
       if (statementDebt && statementDebt > 0) {
@@ -158,7 +343,10 @@ export function DebtsView({
       }
     }
 
-    setPaymentAmount(String(initialAmount || ''));
+    setPaymentAmount(
+      initialAmount > 0 ? String(initialAmount) : ''
+    );
+
     setPaymentAccountId(accounts[0]?.id || '');
   };
 
@@ -167,51 +355,29 @@ export function DebtsView({
 
     if (!payingDebt || !onMakeDebtPayment) return;
 
-    const num = parseFloat(paymentAmount);
+    const num = parseMoney(paymentAmount);
 
-    if (isNaN(num) || num <= 0) return;
+    if (!Number.isFinite(num) || num <= 0) return;
+
+    const maximumPayment = safeNumber(
+      payingDebt.currentDebtOrAmount
+    );
+
+    const finalAmount =
+      maximumPayment > 0
+        ? Math.min(num, maximumPayment)
+        : num;
 
     onMakeDebtPayment(
       payingDebt.type,
       payingDebt.id,
-      num,
+      finalAmount,
       paymentAccountId || accounts[0]?.id
     );
 
     setPayingDebt(null);
-  };
-
-  const [formBank, setFormBank] = useState('Garanti BBVA');
-  const [formName, setFormName] = useState('');
-  const [formLimit, setFormLimit] = useState('');
-  const [formAvailable, setFormAvailable] = useState('');
-  const [formCurrentDebt, setFormCurrentDebt] = useState('');
-  const [formStatementDebt, setFormStatementDebt] = useState('');
-  const [formMinPayment, setFormMinPayment] = useState('');
-  const [formDueDate, setFormDueDate] = useState('');
-  const [formOriginalAmount, setFormOriginalAmount] = useState('');
-  const [formInstallment, setFormInstallment] = useState('');
-  const [formRemainingCount, setFormRemainingCount] = useState('');
-  const [formInterestRate, setFormInterestRate] = useState('5.0');
-  const [formDesc, setFormDesc] = useState('');
-
-  const openAddModal = (type: DebtModalType) => {
-    setEditingItem(null);
-    setOpenModalType(type);
-
-    setFormBank('Ziraat Bankası');
-    setFormName('');
-    setFormLimit('');
-    setFormAvailable('');
-    setFormCurrentDebt('');
-    setFormStatementDebt('');
-    setFormMinPayment('');
-    setFormDueDate('');
-    setFormOriginalAmount('');
-    setFormInstallment('');
-    setFormRemainingCount('');
-    setFormInterestRate('5.0');
-    setFormDesc('');
+    setPaymentAmount('');
+    setPaymentAccountId('');
   };
 
   const handleSaveModal = (e: React.FormEvent) => {
@@ -220,18 +386,31 @@ export function DebtsView({
     if (!openModalType) return;
 
     if (openModalType === 'card') {
-      const limit = parseFloat(formLimit) || 0;
-      const currentDebt = parseFloat(formCurrentDebt) || 0;
-      const statementDebt = parseFloat(formStatementDebt) || 0;
-      const minimumPayment =
-        parseFloat(formMinPayment) || Math.round(statementDebt * 0.2);
-      const availableLimit =
-        parseFloat(formAvailable) || Math.max(0, limit - currentDebt);
+      const limit = parseMoney(formLimit);
+      const currentDebt = parseMoney(formCurrentDebt);
+      const statementDebt = parseMoney(formStatementDebt);
 
-      if (editingItem?.data?.id) {
+      const minimumPaymentInput = parseMoney(formMinPayment);
+
+      const minimumPayment =
+        minimumPaymentInput > 0
+          ? minimumPaymentInput
+          : Math.round(statementDebt * 0.2 * 100) / 100;
+
+      const availableInput = parseMoney(formAvailable);
+
+      const availableLimit =
+        availableInput > 0
+          ? Math.min(
+              availableInput,
+              Math.max(0, limit - currentDebt)
+            )
+          : Math.max(0, limit - currentDebt);
+
+      if (editingItem?.type === 'card') {
         onUpdateCreditCard(editingItem.data.id, {
-          bank: formBank,
-          cardName: formName || 'Kredi Kartı',
+          bank: formBank.trim() || 'Banka',
+          cardName: formName.trim() || 'Kredi Kartı',
           limit,
           availableLimit,
           currentDebt,
@@ -241,29 +420,42 @@ export function DebtsView({
         });
       } else {
         onAddCreditCard({
-          bank: formBank,
-          cardName: formName || 'Bonus / Maximum',
+          bank: formBank.trim() || 'Banka',
+          cardName: formName.trim() || 'Kredi Kartı',
           limit,
           availableLimit,
           currentDebt,
           statementDebt,
           minimumPayment,
           paymentDueDate:
-            formDueDate || new Date().toISOString().slice(0, 10),
+            formDueDate ||
+            new Date().toISOString().slice(0, 10),
         });
       }
-    } else if (openModalType === 'loan') {
-      const originalAmount = parseFloat(formOriginalAmount) || 0;
-      const remainingPrincipal =
-        parseFloat(formCurrentDebt) || originalAmount;
-      const monthlyInstallment = parseFloat(formInstallment) || 0;
-      const remainingInstallments =
-        parseInt(formRemainingCount, 10) || 12;
+    }
 
-      if (editingItem?.data?.id) {
+    if (openModalType === 'loan') {
+      const originalAmount = parseMoney(formOriginalAmount);
+
+      const remainingPrincipalInput =
+        parseMoney(formCurrentDebt);
+
+      const remainingPrincipal =
+        remainingPrincipalInput > 0
+          ? remainingPrincipalInput
+          : originalAmount;
+
+      const monthlyInstallment =
+        parseMoney(formInstallment);
+
+      const remainingInstallments =
+        parseInteger(formRemainingCount) || 12;
+
+      if (editingItem?.type === 'loan') {
         onUpdateLoan(editingItem.data.id, {
-          bank: formBank,
-          loanName: formName || 'İhtiyaç Kredisi',
+          bank: formBank.trim() || 'Banka',
+          loanName:
+            formName.trim() || 'İhtiyaç Kredisi',
           originalAmount,
           remainingPrincipal,
           monthlyInstallment,
@@ -272,65 +464,83 @@ export function DebtsView({
         });
       } else {
         onAddLoan({
-          bank: formBank,
-          loanName: formName || 'Banka Kredisi',
+          bank: formBank.trim() || 'Banka',
+          loanName:
+            formName.trim() || 'Banka Kredisi',
           originalAmount,
           remainingPrincipal,
           monthlyInstallment,
           remainingInstallments,
           nextPaymentDate:
-            formDueDate || new Date().toISOString().slice(0, 10),
-        });
-      }
-    } else if (openModalType === 'kmh') {
-      const limit = parseFloat(formLimit) || 0;
-      const usedAmount = parseFloat(formCurrentDebt) || 0;
-      const remainingAvailable = Math.max(0, limit - usedAmount);
-
-      if (editingItem?.data?.id) {
-        onUpdateOverdraft(editingItem.data.id, {
-          bank: formBank,
-          accountName: formName || 'KMH / Ek Hesap',
-          limit,
-          usedAmount,
-          remainingAvailable,
-          interestRate: parseFloat(formInterestRate) || 5.0,
-          paymentDate: formDueDate,
-        });
-      } else {
-        onAddOverdraft({
-          bank: formBank,
-          accountName: formName || 'Avans / Artı Para Hesabı',
-          limit,
-          usedAmount,
-          remainingAvailable,
-          interestRate: parseFloat(formInterestRate) || 5.0,
-          paymentDate:
-            formDueDate || new Date().toISOString().slice(0, 10),
-        });
-      }
-    } else if (openModalType === 'other') {
-      const amount = parseFloat(formCurrentDebt) || 0;
-
-      if (editingItem?.data?.id) {
-        onUpdateOtherDebt(editingItem.data.id, {
-          debtName: formName || 'Elden Borç',
-          amount,
-          dueDate: formDueDate,
-          description: formDesc,
-        });
-      } else {
-        onAddOtherDebt({
-          debtName: formName || 'Şahsi Borç',
-          amount,
-          dueDate: formDueDate,
-          description: formDesc,
+            formDueDate ||
+            new Date().toISOString().slice(0, 10),
         });
       }
     }
 
-    setOpenModalType(null);
-    setEditingItem(null);
+    if (openModalType === 'kmh') {
+      const limit = parseMoney(formLimit);
+      const usedAmount = parseMoney(formCurrentDebt);
+
+      const remainingAvailable = Math.max(
+        0,
+        limit - usedAmount
+      );
+
+      const interestRate = parseMoney(formInterestRate);
+
+      if (editingItem?.type === 'kmh') {
+        onUpdateOverdraft(editingItem.data.id, {
+          bank: formBank.trim() || 'Banka',
+          accountName:
+            formName.trim() || 'KMH / Ek Hesap',
+          limit,
+          usedAmount,
+          remainingAvailable,
+          interestRate:
+            interestRate > 0 ? interestRate : 5,
+          paymentDate: formDueDate,
+        });
+      } else {
+        onAddOverdraft({
+          bank: formBank.trim() || 'Banka',
+          accountName:
+            formName.trim() || 'Avans / Artı Para Hesabı',
+          limit,
+          usedAmount,
+          remainingAvailable,
+          interestRate:
+            interestRate > 0 ? interestRate : 5,
+          paymentDate:
+            formDueDate ||
+            new Date().toISOString().slice(0, 10),
+        });
+      }
+    }
+
+    if (openModalType === 'other') {
+      const amount = parseMoney(formCurrentDebt);
+
+      if (editingItem?.type === 'other') {
+        onUpdateOtherDebt(editingItem.data.id, {
+          debtName:
+            formName.trim() || 'Elden Borç',
+          amount,
+          dueDate: formDueDate,
+          description: formDesc.trim(),
+        });
+      } else {
+        onAddOtherDebt({
+          debtName:
+            formName.trim() || 'Şahsi Borç',
+          amount,
+          dueDate: formDueDate,
+          description: formDesc.trim(),
+        });
+      }
+    }
+
+    closeAllModals();
   };
 
   const totalCount =
@@ -339,12 +549,36 @@ export function DebtsView({
     overdrafts.length +
     otherDebts.length;
 
-  const tabs: { id: DebtTab; label: string; count: number }[] = [
-    { id: 'all', label: 'Tümü', count: totalCount },
-    { id: 'cards', label: 'Kredi Kartları', count: creditCards.length },
-    { id: 'loans', label: 'Krediler', count: loans.length },
-    { id: 'kmh', label: 'KMH', count: overdrafts.length },
-    { id: 'other', label: 'Diğer', count: otherDebts.length },
+  const tabs: {
+    id: DebtTab;
+    label: string;
+    count: number;
+  }[] = [
+    {
+      id: 'all',
+      label: 'Tümü',
+      count: totalCount,
+    },
+    {
+      id: 'cards',
+      label: 'Kredi Kartları',
+      count: creditCards.length,
+    },
+    {
+      id: 'loans',
+      label: 'Krediler',
+      count: loans.length,
+    },
+    {
+      id: 'kmh',
+      label: 'KMH',
+      count: overdrafts.length,
+    },
+    {
+      id: 'other',
+      label: 'Diğer',
+      count: otherDebts.length,
+    },
   ];
 
   const debtStatus =
@@ -373,13 +607,16 @@ export function DebtsView({
     onAdd: () => void
   ) => (
     <div className="flex flex-col gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100">
+      <div className="flex min-w-0 items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100">
           {icon}
         </div>
 
-        <div>
-          <h2 className="text-sm font-black text-slate-900">{title}</h2>
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-black text-slate-900">
+            {title}
+          </h2>
+
           <p className="mt-0.5 text-[11px] text-slate-500">
             {count} kayıt
           </p>
@@ -388,7 +625,7 @@ export function DebtsView({
 
       <button
         onClick={onAdd}
-        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700"
+        className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700 shadow-sm transition hover:border-emerald-300 hover:bg-emerald-50 hover:text-emerald-700 sm:w-auto"
       >
         <Plus className="h-3.5 w-3.5" />
         Ekle
@@ -397,7 +634,7 @@ export function DebtsView({
   );
 
   return (
-    <div className="mx-auto max-w-7xl space-y-5 pb-24 md:pb-10">
+    <div className="mx-auto w-full max-w-7xl space-y-5 overflow-x-hidden pb-24 md:pb-10">
       {/* HEADER */}
       <section
         className="relative overflow-hidden rounded-[24px] p-5 text-white shadow-xl sm:p-7"
@@ -406,38 +643,41 @@ export function DebtsView({
         }}
       >
         <div className="pointer-events-none absolute -right-20 -top-20 h-52 w-52 rounded-full bg-emerald-400/10 blur-3xl" />
+
         <div className="pointer-events-none absolute -bottom-24 left-1/3 h-48 w-48 rounded-full bg-blue-400/10 blur-3xl" />
 
-        <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
+        <div className="relative flex min-w-0 flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <div className="mb-3 inline-flex max-w-full items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5">
               <CreditCardIcon
-                className="h-3.5 w-3.5"
+                className="h-3.5 w-3.5 shrink-0"
                 style={{ color: CEBI_GREEN }}
               />
-              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">
+
+              <span className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-slate-300">
                 CEBİ Finansal Kontrol
               </span>
             </div>
 
-            <h1 className="text-2xl font-black tracking-tight sm:text-3xl">
+            <h1 className="text-2xl font-black tracking-tight text-white sm:text-3xl">
               Borç Yönetimi
             </h1>
 
             <p className="mt-1.5 max-w-xl text-xs leading-5 text-slate-300 sm:text-sm">
-              Kredi kartı, kredi, KMH ve şahsi borçlarını tek ekrandan
-              takip et ve ödeme planını kontrol altında tut.
+              Kredi kartı, kredi, KMH ve şahsi borçlarını tek
+              ekrandan takip et ve ödeme planını kontrol altında
+              tut.
             </p>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 sm:flex">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             <button
               id="add-card-btn"
               onClick={() => openAddModal('card')}
               className={`${actionButtonClass} bg-white text-slate-900 hover:bg-emerald-50`}
             >
-              <Plus className="h-3.5 w-3.5" />
-              Kredi Kartı
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">Kredi Kartı</span>
             </button>
 
             <button
@@ -445,8 +685,8 @@ export function DebtsView({
               onClick={() => openAddModal('loan')}
               className={`${actionButtonClass} border border-white/10 bg-white/10 text-white hover:bg-white/15`}
             >
-              <Plus className="h-3.5 w-3.5" />
-              Kredi
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span>Kredi</span>
             </button>
 
             <button
@@ -454,8 +694,8 @@ export function DebtsView({
               onClick={() => openAddModal('kmh')}
               className={`${actionButtonClass} border border-white/10 bg-white/10 text-white hover:bg-white/15`}
             >
-              <Plus className="h-3.5 w-3.5" />
-              KMH
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span>KMH</span>
             </button>
 
             <button
@@ -463,8 +703,8 @@ export function DebtsView({
               onClick={() => openAddModal('other')}
               className={`${actionButtonClass} border border-white/10 bg-white/10 text-white hover:bg-white/15`}
             >
-              <Plus className="h-3.5 w-3.5" />
-              Diğer
+              <Plus className="h-3.5 w-3.5 shrink-0" />
+              <span>Diğer</span>
             </button>
           </div>
         </div>
@@ -475,7 +715,7 @@ export function DebtsView({
         <div className="absolute -right-10 -top-16 h-44 w-44 rounded-full bg-emerald-400/10 blur-3xl" />
 
         <div className="relative grid gap-6 lg:grid-cols-[1.2fr_1fr] lg:items-center">
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-400">
                 Toplam Borç Yükü
@@ -488,11 +728,11 @@ export function DebtsView({
               </span>
             </div>
 
-            <div className="mt-2 text-3xl font-black tracking-tight sm:text-4xl">
+            <div className="mt-2 break-words text-3xl font-black tracking-tight sm:text-4xl">
               {formatCurrency(snapshot.totalDebt)}
             </div>
 
-            <div className="mt-3 flex items-center gap-3">
+            <div className="mt-3 flex min-w-0 items-center gap-3">
               <div className="h-2 max-w-xs flex-1 overflow-hidden rounded-full bg-white/10">
                 <div
                   className={`h-full rounded-full transition-all ${
@@ -511,7 +751,7 @@ export function DebtsView({
                 />
               </div>
 
-              <span className="text-xs font-bold text-slate-300">
+              <span className="shrink-0 text-xs font-bold text-slate-300">
                 %{snapshot.debtRatio}
               </span>
             </div>
@@ -530,12 +770,13 @@ export function DebtsView({
             ].map(([label, value]) => (
               <div
                 key={String(label)}
-                className="rounded-2xl border border-white/5 bg-white/[0.04] p-3"
+                className="min-w-0 rounded-2xl border border-white/5 bg-white/[0.04] p-3"
               >
                 <span className="block text-[10px] font-medium text-slate-400">
                   {label}
                 </span>
-                <span className="mt-1 block text-sm font-black text-white">
+
+                <span className="mt-1 block truncate text-sm font-black text-white">
                   {formatCurrency(Number(value))}
                 </span>
               </div>
@@ -545,7 +786,7 @@ export function DebtsView({
       </section>
 
       {/* FILTERS */}
-      <div className="overflow-x-auto">
+      <div className="w-full overflow-x-auto pb-1">
         <div className="flex min-w-max gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
           {tabs.map((tab) => {
             const active = activeTab === tab.id;
@@ -561,6 +802,7 @@ export function DebtsView({
                 }`}
               >
                 {tab.label}
+
                 <span
                   className={`ml-1.5 rounded-md px-1.5 py-0.5 text-[10px] ${
                     active
@@ -596,20 +838,29 @@ export function DebtsView({
             ) : (
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 {creditCards.map((card) => {
-                  const rel = getRelativeDaysInfo(card.paymentDueDate);
+                  const rel = getRelativeDaysInfo(
+                    card.paymentDueDate
+                  );
+
+                  const utilization =
+                    card.limit > 0
+                      ? (card.currentDebt / card.limit) * 100
+                      : 0;
 
                   return (
                     <div
                       key={card.id}
-                      className="group overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white hover:shadow-md"
+                      className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-emerald-200 hover:bg-white hover:shadow-md"
                     >
                       <div className="h-1 bg-gradient-to-r from-[#10B981] to-emerald-300" />
 
-                      <div className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <span className="inline-flex rounded-lg bg-[#0B1F33] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-white">
-                              {card.bank}
+                      <div className="min-w-0 p-4">
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <span className="inline-flex max-w-full rounded-lg bg-[#0B1F33] px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-white">
+                              <span className="truncate">
+                                {card.bank}
+                              </span>
                             </span>
 
                             <h3 className="mt-2 truncate text-sm font-black text-slate-900">
@@ -639,6 +890,14 @@ export function DebtsView({
                             )}
 
                             <button
+                              title="Düzenle"
+                              onClick={() => openEditCard(card)}
+                              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </button>
+
+                            <button
                               title="Sil"
                               onClick={() => {
                                 if (
@@ -661,7 +920,7 @@ export function DebtsView({
                             Güncel Borç
                           </span>
 
-                          <div className="mt-1 text-2xl font-black tracking-tight">
+                          <div className="mt-1 break-words text-2xl font-black tracking-tight">
                             {formatCurrency(card.currentDebt)}
                           </div>
 
@@ -670,22 +929,16 @@ export function DebtsView({
                               className="h-full rounded-full bg-emerald-400"
                               style={{
                                 width: `${Math.min(
-                                  Math.max(
-                                    card.limit > 0
-                                      ? (card.currentDebt / card.limit) *
-                                          100
-                                      : 0,
-                                    0
-                                  ),
+                                  Math.max(utilization, 0),
                                   100
                                 )}%`,
                               }}
                             />
                           </div>
 
-                          <div className="mt-2 flex justify-between text-[10px] text-slate-400">
+                          <div className="mt-2 flex items-center justify-between gap-2 text-[10px] text-slate-400">
                             <span>Limit</span>
-                            <span className="font-bold text-slate-200">
+                            <span className="truncate font-bold text-slate-200">
                               {formatCurrency(card.limit)}
                             </span>
                           </div>
@@ -694,18 +947,27 @@ export function DebtsView({
                         <div className="mt-3 grid grid-cols-2 gap-2">
                           <Metric
                             label="Ekstre"
-                            value={formatCurrency(card.statementDebt)}
+                            value={formatCurrency(
+                              card.statementDebt
+                            )}
                           />
+
                           <Metric
                             label="Asgari"
-                            value={formatCurrency(card.minimumPayment)}
+                            value={formatCurrency(
+                              card.minimumPayment
+                            )}
                             accent="amber"
                           />
+
                           <Metric
                             label="Kullanılabilir"
-                            value={formatCurrency(card.availableLimit)}
+                            value={formatCurrency(
+                              card.availableLimit
+                            )}
                             accent="green"
                           />
+
                           <Metric
                             label="Son Ödeme"
                             value={formatTurkishDate(
@@ -715,14 +977,17 @@ export function DebtsView({
                         </div>
 
                         <div
-                          className={`mt-3 flex items-center justify-between rounded-xl border px-3 py-2 text-[10px] font-bold ${
+                          className={`mt-3 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[10px] font-bold ${
                             rel.isOverdue
                               ? 'border-rose-200 bg-rose-50 text-rose-700'
                               : 'border-slate-200 bg-white text-slate-600'
                           }`}
                         >
-                          <span>Ödeme durumu</span>
-                          <span>
+                          <span className="shrink-0">
+                            Ödeme durumu
+                          </span>
+
+                          <span className="truncate text-right">
                             {rel.isOverdue
                               ? `Gecikmiş · ${rel.text}`
                               : rel.text}
@@ -763,18 +1028,20 @@ export function DebtsView({
                   return (
                     <div
                       key={loan.id}
-                      className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-white hover:shadow-md"
+                      className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-blue-200 hover:bg-white hover:shadow-md"
                     >
                       <div className="h-1 bg-gradient-to-r from-blue-600 to-cyan-400" />
 
                       <div className="p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <span className="inline-flex rounded-lg bg-blue-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700">
-                              {loan.bank}
+                        <div className="flex min-w-0 items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <span className="inline-flex max-w-full rounded-lg bg-blue-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-blue-700">
+                              <span className="truncate">
+                                {loan.bank}
+                              </span>
                             </span>
 
-                            <h3 className="mt-2 text-sm font-black text-slate-900">
+                            <h3 className="mt-2 truncate text-sm font-black text-slate-900">
                               {loan.loanName}
                             </h3>
                           </div>
@@ -800,6 +1067,14 @@ export function DebtsView({
                             )}
 
                             <button
+                              title="Düzenle"
+                              onClick={() => openEditLoan(loan)}
+                              className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                            </button>
+
+                            <button
                               title="Sil"
                               onClick={() => {
                                 if (
@@ -822,7 +1097,8 @@ export function DebtsView({
                             <span className="text-[10px] font-bold text-blue-600">
                               Kalan Anapara
                             </span>
-                            <div className="mt-1 text-2xl font-black text-slate-900">
+
+                            <div className="mt-1 break-words text-2xl font-black text-slate-900">
                               {formatCurrency(
                                 loan.remainingPrincipal
                               )}
@@ -858,15 +1134,21 @@ export function DebtsView({
                         </div>
 
                         <div
-                          className={`mt-3 rounded-xl border px-3 py-2 text-[10px] font-bold ${
+                          className={`mt-3 flex items-center justify-between gap-2 rounded-xl border px-3 py-2 text-[10px] font-bold ${
                             rel.isOverdue
                               ? 'border-rose-200 bg-rose-50 text-rose-700'
                               : 'border-slate-200 bg-white text-slate-600'
                           }`}
                         >
-                          {rel.isOverdue
-                            ? `Ödeme gecikmiş · ${rel.text}`
-                            : `Sonraki taksit · ${rel.text}`}
+                          <span className="shrink-0">
+                            Ödeme durumu
+                          </span>
+
+                          <span className="truncate text-right">
+                            {rel.isOverdue
+                              ? `Ödeme gecikmiş · ${rel.text}`
+                              : `Sonraki taksit · ${rel.text}`}
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -898,18 +1180,20 @@ export function DebtsView({
                 {overdrafts.map((kmh) => (
                   <div
                     key={kmh.id}
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-amber-200 hover:bg-white hover:shadow-md"
+                    className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-amber-200 hover:bg-white hover:shadow-md"
                   >
                     <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-400" />
 
                     <div className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <span className="inline-flex rounded-lg bg-amber-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-amber-700">
-                            {kmh.bank}
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <span className="inline-flex max-w-full rounded-lg bg-amber-50 px-2 py-1 text-[9px] font-bold uppercase tracking-wide text-amber-700">
+                            <span className="truncate">
+                              {kmh.bank}
+                            </span>
                           </span>
 
-                          <h3 className="mt-2 text-sm font-black text-slate-900">
+                          <h3 className="mt-2 truncate text-sm font-black text-slate-900">
                             {kmh.accountName ||
                               'Avans Hesap (KMH)'}
                           </h3>
@@ -935,6 +1219,14 @@ export function DebtsView({
                           )}
 
                           <button
+                            title="Düzenle"
+                            onClick={() => openEditKmh(kmh)}
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
                             title="Sil"
                             onClick={() => {
                               if (
@@ -956,7 +1248,8 @@ export function DebtsView({
                         <span className="text-[10px] font-bold text-amber-700">
                           Kullanılan Borç
                         </span>
-                        <div className="mt-1 text-2xl font-black text-slate-900">
+
+                        <div className="mt-1 break-words text-2xl font-black text-slate-900">
                           {formatCurrency(kmh.usedAmount)}
                         </div>
                       </div>
@@ -969,22 +1262,27 @@ export function DebtsView({
                           )}
                           accent="green"
                         />
+
                         <Metric
                           label="Limit"
                           value={formatCurrency(kmh.limit)}
                         />
+
                         <Metric
                           label="Faiz"
-                          value={`%${kmh.interestRate || 5.0}`}
+                          value={`%${kmh.interestRate || 5}`}
                           accent="amber"
                         />
                       </div>
 
                       {kmh.paymentDate && (
-                        <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600">
+                        <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600">
                           <span>Ödeme tarihi</span>
-                          <span>
-                            {formatTurkishDate(kmh.paymentDate)}
+
+                          <span className="truncate text-right">
+                            {formatTurkishDate(
+                              kmh.paymentDate
+                            )}
                           </span>
                         </div>
                       )}
@@ -1017,19 +1315,19 @@ export function DebtsView({
                 {otherDebts.map((debt) => (
                   <div
                     key={debt.id}
-                    className="overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-purple-200 hover:bg-white hover:shadow-md"
+                    className="group min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/50 transition hover:-translate-y-0.5 hover:border-purple-200 hover:bg-white hover:shadow-md"
                   >
                     <div className="h-1 bg-gradient-to-r from-purple-500 to-fuchsia-400" />
 
                     <div className="p-4">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
+                      <div className="flex min-w-0 items-start justify-between gap-3">
+                        <div className="min-w-0 flex-1">
                           <h3 className="truncate text-sm font-black text-slate-900">
                             {debt.debtName}
                           </h3>
 
                           {debt.description && (
-                            <p className="mt-1 text-xs text-slate-500">
+                            <p className="mt-1 line-clamp-2 text-xs text-slate-500">
                               {debt.description}
                             </p>
                           )}
@@ -1055,6 +1353,16 @@ export function DebtsView({
                           )}
 
                           <button
+                            title="Düzenle"
+                            onClick={() =>
+                              openEditOtherDebt(debt)
+                            }
+                            className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                          </button>
+
+                          <button
                             title="Sil"
                             onClick={() => {
                               if (
@@ -1077,16 +1385,19 @@ export function DebtsView({
                           Borç Tutarı
                         </span>
 
-                        <div className="mt-1 text-2xl font-black text-slate-900">
+                        <div className="mt-1 break-words text-2xl font-black text-slate-900">
                           {formatCurrency(debt.amount)}
                         </div>
                       </div>
 
                       {debt.dueDate && (
-                        <div className="mt-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600">
+                        <div className="mt-3 flex items-center justify-between gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-bold text-slate-600">
                           <span>Vade</span>
-                          <span>
-                            {formatTurkishDate(debt.dueDate)}
+
+                          <span className="truncate text-right">
+                            {formatTurkishDate(
+                              debt.dueDate
+                            )}
                           </span>
                         </div>
                       )}
@@ -1102,35 +1413,37 @@ export function DebtsView({
       {/* ADD / EDIT MODAL */}
       {openModalType && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1F33]/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#0B1F33]/70 p-3 backdrop-blur-sm sm:p-4"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
-              setOpenModalType(null);
+              closeAllModals();
             }
           }}
         >
-          <div className="max-h-[92vh] w-full max-w-xl overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-2xl">
-            <div className="flex items-center justify-between bg-[#0B1F33] px-5 py-4 text-white sm:px-6">
-              <div>
+          <div className="flex max-h-[94vh] w-full max-w-xl flex-col overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between bg-[#0B1F33] px-5 py-4 text-white sm:px-6">
+              <div className="min-w-0">
                 <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300">
                   CEBİ · Borç Yönetimi
                 </div>
 
-                <h3 className="mt-1 text-base font-black">
-                  {openModalType === 'card' &&
-                    'Kredi Kartı Ekle'}
-                  {openModalType === 'loan' &&
-                    'Banka Kredisi Ekle'}
-                  {openModalType === 'kmh' &&
-                    'KMH / Ek Hesap Ekle'}
-                  {openModalType === 'other' &&
-                    'Diğer Borç Ekle'}
+                <h3 className="mt-1 truncate text-base font-black">
+                  {editingItem
+                    ? 'Borç Kaydını Düzenle'
+                    : openModalType === 'card'
+                    ? 'Kredi Kartı Ekle'
+                    : openModalType === 'loan'
+                    ? 'Banka Kredisi Ekle'
+                    : openModalType === 'kmh'
+                    ? 'KMH / Ek Hesap Ekle'
+                    : 'Diğer Borç Ekle'}
                 </h3>
               </div>
 
               <button
-                onClick={() => setOpenModalType(null)}
-                className="rounded-xl bg-white/10 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+                onClick={closeAllModals}
+                className="ml-3 shrink-0 rounded-xl bg-white/10 p-2 text-slate-300 transition hover:bg-white/15 hover:text-white"
+                aria-label="Kapat"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1138,7 +1451,7 @@ export function DebtsView({
 
             <form
               onSubmit={handleSaveModal}
-              className="max-h-[calc(92vh-76px)] overflow-y-auto p-5 sm:p-6"
+              className="min-h-0 overflow-y-auto p-5 sm:p-6"
             >
               <div className="space-y-4">
                 {openModalType !== 'other' && (
@@ -1146,9 +1459,11 @@ export function DebtsView({
                     <label className={labelClass}>
                       Banka Adı
                     </label>
+
                     <input
                       type="text"
                       required
+                      autoComplete="organization"
                       placeholder="Örn: Garanti BBVA"
                       value={formBank}
                       onChange={(e) =>
@@ -1161,20 +1476,28 @@ export function DebtsView({
 
                 <div>
                   <label className={labelClass}>
-                    {openModalType === 'card' &&
-                      'Kart Adı'}
-                    {openModalType === 'loan' &&
-                      'Kredi Adı'}
-                    {openModalType === 'kmh' &&
-                      'Hesap Adı'}
-                    {openModalType === 'other' &&
-                      'Borç Adı / Kime'}
+                    {openModalType === 'card'
+                      ? 'Kart Adı'
+                      : openModalType === 'loan'
+                      ? 'Kredi Adı'
+                      : openModalType === 'kmh'
+                      ? 'Hesap Adı'
+                      : 'Borç Adı / Kime'}
                   </label>
 
                   <input
                     type="text"
                     required
-                    placeholder="Başlık giriniz"
+                    autoComplete="off"
+                    placeholder={
+                      openModalType === 'card'
+                        ? 'Örn: Bonus'
+                        : openModalType === 'loan'
+                        ? 'Örn: İhtiyaç Kredisi'
+                        : openModalType === 'kmh'
+                        ? 'Örn: Avans Hesap'
+                        : 'Örn: Ahmet'
+                    }
                     value={formName}
                     onChange={(e) =>
                       setFormName(e.target.value)
@@ -1183,12 +1506,14 @@ export function DebtsView({
                   />
                 </div>
 
+                {/* CARD FORM */}
                 {openModalType === 'card' && (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field
                         label="Kart Limiti (₺)"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="50000"
                         value={formLimit}
                         onChange={setFormLimit}
@@ -1196,7 +1521,8 @@ export function DebtsView({
 
                       <Field
                         label="Güncel Borç (₺)"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="14500"
                         value={formCurrentDebt}
                         onChange={setFormCurrentDebt}
@@ -1206,7 +1532,8 @@ export function DebtsView({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field
                         label="Ekstre Borcu (₺)"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="9200"
                         value={formStatementDebt}
                         onChange={setFormStatementDebt}
@@ -1214,7 +1541,8 @@ export function DebtsView({
 
                       <Field
                         label="Asgari Ödeme (₺)"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="1840"
                         value={formMinPayment}
                         onChange={setFormMinPayment}
@@ -1223,8 +1551,9 @@ export function DebtsView({
 
                     <Field
                       label="Kullanılabilir Limit (₺)"
-                      type="number"
-                      placeholder="Otomatik hesaplanır"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="Boş bırakılırsa otomatik hesaplanır"
                       value={formAvailable}
                       onChange={setFormAvailable}
                     />
@@ -1236,15 +1565,23 @@ export function DebtsView({
                       value={formDueDate}
                       onChange={setFormDueDate}
                     />
+
+                    <InfoBox>
+                      Kullanılabilir limit boş bırakılırsa
+                      <strong> kart limiti − güncel borç</strong>{' '}
+                      olarak otomatik hesaplanır.
+                    </InfoBox>
                   </>
                 )}
 
+                {/* LOAN FORM */}
                 {openModalType === 'loan' && (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field
                         label="Toplam Kredi Tutarı"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="100000"
                         value={formOriginalAmount}
                         onChange={setFormOriginalAmount}
@@ -1252,7 +1589,8 @@ export function DebtsView({
 
                       <Field
                         label="Kalan Anapara"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         required
                         placeholder="65000"
                         value={formCurrentDebt}
@@ -1263,7 +1601,8 @@ export function DebtsView({
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field
                         label="Aylık Taksit"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="5000"
                         value={formInstallment}
                         onChange={setFormInstallment}
@@ -1271,7 +1610,8 @@ export function DebtsView({
 
                       <Field
                         label="Kalan Taksit"
-                        type="number"
+                        type="text"
+                        inputMode="numeric"
                         placeholder="12"
                         value={formRemainingCount}
                         onChange={setFormRemainingCount}
@@ -1287,12 +1627,14 @@ export function DebtsView({
                   </>
                 )}
 
+                {/* KMH FORM */}
                 {openModalType === 'kmh' && (
                   <>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <Field
                         label="KMH Limiti"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="25000"
                         value={formLimit}
                         onChange={setFormLimit}
@@ -1300,7 +1642,8 @@ export function DebtsView({
 
                       <Field
                         label="Kullanılan Borç"
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         placeholder="5000"
                         value={formCurrentDebt}
                         onChange={setFormCurrentDebt}
@@ -1309,8 +1652,8 @@ export function DebtsView({
 
                     <Field
                       label="Aylık Akdi Faiz (%)"
-                      type="number"
-                      step="0.1"
+                      type="text"
+                      inputMode="decimal"
                       placeholder="5.0"
                       value={formInterestRate}
                       onChange={setFormInterestRate}
@@ -1325,11 +1668,13 @@ export function DebtsView({
                   </>
                 )}
 
+                {/* OTHER DEBT FORM */}
                 {openModalType === 'other' && (
                   <>
                     <Field
                       label="Borç Tutarı (₺)"
-                      type="number"
+                      type="text"
+                      inputMode="decimal"
                       required
                       placeholder="10000"
                       value={formCurrentDebt}
@@ -1364,18 +1709,19 @@ export function DebtsView({
                 <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-4 sm:flex-row sm:justify-end">
                   <button
                     type="button"
-                    onClick={() => setOpenModalType(null)}
-                    className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50"
+                    onClick={closeAllModals}
+                    className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 sm:w-auto"
                   >
                     Vazgeç
                   </button>
 
                   <button
                     type="submit"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#0B1F33] px-5 py-2.5 text-xs font-black text-white transition hover:bg-[#102D46]"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#0B1F33] px-5 py-2.5 text-xs font-black text-white transition hover:bg-[#102D46] sm:w-auto"
                   >
                     <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    Kaydet
+
+                    {editingItem ? 'Değişiklikleri Kaydet' : 'Kaydet'}
                   </button>
                 </div>
               </div>
@@ -1387,7 +1733,7 @@ export function DebtsView({
       {/* PAYMENT MODAL */}
       {payingDebt && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0B1F33]/70 p-4 backdrop-blur-sm"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-[#0B1F33]/70 p-3 backdrop-blur-sm sm:p-4"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setPayingDebt(null);
@@ -1396,11 +1742,12 @@ export function DebtsView({
         >
           <div className="w-full max-w-md overflow-hidden rounded-[24px] bg-white shadow-2xl">
             <div className="bg-[#0B1F33] p-5 text-white">
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
                   <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-emerald-300">
                     CEBİ · Ödeme
                   </div>
+
                   <h3 className="mt-1 text-lg font-black">
                     Borç Ödemesi
                   </h3>
@@ -1408,7 +1755,8 @@ export function DebtsView({
 
                 <button
                   onClick={() => setPayingDebt(null)}
-                  className="rounded-xl bg-white/10 p-2 text-slate-300 hover:bg-white/15 hover:text-white"
+                  className="shrink-0 rounded-xl bg-white/10 p-2 text-slate-300 hover:bg-white/15 hover:text-white"
+                  aria-label="Ödeme penceresini kapat"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1428,11 +1776,42 @@ export function DebtsView({
                   Mevcut Borç
                 </span>
 
-                <div className="mt-1 text-xl font-black text-slate-900">
+                <div className="mt-1 break-words text-xl font-black text-slate-900">
                   {formatCurrency(
                     payingDebt.currentDebtOrAmount
                   )}
                 </div>
+
+                {payingDebt.type === 'card' &&
+                  payingDebt.statementDebt &&
+                  payingDebt.statementDebt > 0 && (
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">
+                      Ekstre: {formatCurrency(
+                        payingDebt.statementDebt
+                      )}
+                      {payingDebt.minOrInstallment &&
+                        payingDebt.minOrInstallment > 0 && (
+                          <>
+                            {' '}
+                            · Asgari:{' '}
+                            {formatCurrency(
+                              payingDebt.minOrInstallment
+                            )}
+                          </>
+                        )}
+                    </p>
+                  )}
+
+                {payingDebt.type === 'loan' &&
+                  payingDebt.minOrInstallment &&
+                  payingDebt.minOrInstallment > 0 && (
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">
+                      Aylık taksit:{' '}
+                      {formatCurrency(
+                        payingDebt.minOrInstallment
+                      )}
+                    </p>
+                  )}
               </div>
 
               <div>
@@ -1441,20 +1820,28 @@ export function DebtsView({
                 </label>
 
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="decimal"
                   min="0.01"
-                  step="0.01"
                   required
                   autoFocus
                   value={paymentAmount}
                   onChange={(e) =>
                     setPaymentAmount(e.target.value)
                   }
+                  placeholder="Örn: 2500"
                   className={`${inputClass} text-lg font-black`}
                 />
+
+                <p className="mt-1.5 text-[10px] text-slate-400">
+                  Türkçe format da kullanabilirsin:
+                  {' '}
+                  <strong>2.500</strong> veya{' '}
+                  <strong>2.500,50</strong>
+                </p>
               </div>
 
-              {accounts.length > 0 && (
+              {accounts.length > 0 ? (
                 <div>
                   <label className={labelClass}>
                     Ödeme Yapılacak Hesap
@@ -1467,29 +1854,41 @@ export function DebtsView({
                     }
                     className={inputClass}
                   >
-{accounts.map((account) => (
-  <option
-    key={account.id}
-    value={account.id}
-  >
-    {account.bankName} - {account.accountName}
-  </option>
-))}
-</select>
-</div>
-)}
+                    {accounts.map((account) => (
+                      <option
+                        key={account.id}
+                        value={account.id}
+                      >
+                        {account.bankName} -{' '}
+                        {account.accountName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <InfoBox variant="warning">
+                  Ödeme kaynağı olarak kullanabileceğin bir
+                  banka hesabı bulunmuyor. Önce bir banka hesabı
+                  eklemen gerekebilir.
+                </InfoBox>
+              )}
+
               <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
                 <button
                   type="button"
                   onClick={() => setPayingDebt(null)}
-                  className="rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+                  className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-50 sm:w-auto"
                 >
                   Vazgeç
                 </button>
 
                 <button
                   type="submit"
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#10B981] px-5 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-600"
+                  disabled={
+                    !onMakeDebtPayment ||
+                    parseMoney(paymentAmount) <= 0
+                  }
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#10B981] px-5 py-2.5 text-xs font-black text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   <CheckCircle2 className="h-4 w-4" />
                   Ödemeyi Kaydet
@@ -1523,12 +1922,14 @@ function Metric({
       : 'text-slate-900';
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-3">
-      <span className="block text-[9px] font-bold uppercase tracking-wide text-slate-400">
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-3">
+      <span className="block truncate text-[9px] font-bold uppercase tracking-wide text-slate-400">
         {label}
       </span>
+
       <span
         className={`mt-1 block truncate text-xs font-black ${valueClass}`}
+        title={value}
       >
         {value}
       </span>
@@ -1574,6 +1975,7 @@ function Field({
   onChange,
   required = false,
   step,
+  inputMode,
 }: {
   label: string;
   type?: string;
@@ -1582,20 +1984,42 @@ function Field({
   onChange: (value: string) => void;
   required?: boolean;
   step?: string;
+  inputMode?: React.HTMLAttributes<HTMLInputElement>['inputMode'];
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <label className={labelClass}>{label}</label>
 
       <input
         type={type}
         required={required}
         step={step}
+        inputMode={inputMode}
         placeholder={placeholder}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         className={inputClass}
       />
+    </div>
+  );
+}
+
+function InfoBox({
+  children,
+  variant = 'default',
+}: {
+  children: React.ReactNode;
+  variant?: 'default' | 'warning';
+}) {
+  return (
+    <div
+      className={`rounded-xl border px-3.5 py-3 text-[10px] leading-5 ${
+        variant === 'warning'
+          ? 'border-amber-200 bg-amber-50 text-amber-800'
+          : 'border-slate-200 bg-slate-50 text-slate-600'
+      }`}
+    >
+      {children}
     </div>
   );
 }
