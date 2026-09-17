@@ -94,6 +94,46 @@ function cebiExpenseCategory(text: string): string {
   return 'diger';
 }
 
+function cebiExpenseCategoryLabel(category: string): string {
+  const labels: Record<string, string> = {
+    market: 'Market',
+    yemek: 'Yemek',
+    ulasim: 'Ulaşım',
+    fatura: 'Fatura',
+    kira: 'Kira',
+    alisveris: 'Alışveriş',
+    saglik: 'Sağlık',
+    eglence: 'Eğlence',
+    abonelik: 'Abonelik',
+    egitim: 'Eğitim',
+    akaryakit: 'Akaryakıt',
+    ev: 'Ev',
+    giyim: 'Giyim',
+    elektronik: 'Elektronik',
+    sigorta: 'Sigorta',
+    vergi: 'Vergi',
+    diger: 'Diğer',
+  };
+  return labels[category] || 'Diğer';
+}
+
+function cebiBuildExpenseSummary(
+  text: string,
+  category: string,
+  sourceName: string
+): string {
+  const label = cebiExpenseCategoryLabel(category);
+  const q = cebiNormalizeTR(text);
+
+  const merchant =
+    /migros|carrefour|bim|a101|sok/.test(q) ? 'Market alışverişi' :
+    /netflix|spotify/.test(q) ? 'Abonelik ödemesi' :
+    /opet|shell|bp|petrol/.test(q) ? 'Akaryakıt harcaması' :
+    null;
+
+  return `${merchant || `${label} harcaması`} • ${sourceName}`;
+}
+
 function cebiIsExpense(text: string): boolean {
   const q = cebiNormalizeTR(text);
   return /\b(yaptim|harcadim|harcama yaptim|odeme yaptim|odedim|aldim|satın aldim|satin aldim|alisveris yaptim)\b/.test(q)
@@ -702,30 +742,46 @@ const handleAddIncome = (
     }));
 
     setIsCoachLoading(true);
+    // Önceki mesajda harcama tutarı/kategorisi verilip ödeme kaynağı sorulduysa,
+    // sonraki kısa cevabı (örn. "Garanti Bankası") önceki mesajla birleştir.
+    // Böylece çok adımlı sohbetlerde Gemini'ye bağımlı kalmadan işlem tamamlanır.
+    const previousUserMessage = [...appData.coachMessages]
+      .reverse()
+      .find((m) => m.sender === 'user')?.text || '';
+
+    const combinedPendingExpenseText =
+      previousUserMessage &&
+      cebiIsExpense(previousUserMessage) &&
+      !cebiFindExpenseSource(previousUserMessage, appData.accounts, appData.creditCards)
+        ? `${previousUserMessage} ${cleanText}`
+        : '';
+
+    const pendingExpenseText = combinedPendingExpenseText || cleanText;
+
 
     // Android'de backend URL tanımlı olmasa bile gerçek harcamayı yerelde kaydet.
     // Böylece "bugün markette 500 TL Garanti kartımla harcama yaptım" gibi komutlar
     // doğrudan CEBİ'ye işlenir.
-    if (cebiIsExpense(cleanText)) {
-      const amount = cebiParseAmount(cleanText);
-      const source = cebiFindExpenseSource(cleanText, appData.accounts, appData.creditCards);
+    if (cebiIsExpense(pendingExpenseText)) {
+      const amount = cebiParseAmount(pendingExpenseText);
+      const source = cebiFindExpenseSource(pendingExpenseText, appData.accounts, appData.creditCards);
 
       if (amount && source) {
         handleAddExpense({
           amount,
-          category: cebiExpenseCategory(cleanText) as any,
+          category: cebiExpenseCategory(pendingExpenseText) as any,
           date: new Date().toISOString().slice(0, 10),
           paymentSourceId: source.id,
           paymentSourceName: source.name,
           paymentSourceType: source.type as any,
-          note: cleanText,
+          note: cebiBuildExpenseSummary(pendingExpenseText, cebiExpenseCategory(pendingExpenseText), source.name),
           isDebtPayment: false,
         });
 
         const msg: CoachMessage = {
           id: `msg-coach-${Date.now()}`,
           sender: 'coach',
-          text: `✅ ${amount.toLocaleString('tr-TR')} ₺ ${cebiExpenseCategory(cleanText)} harcamasını ${source.name} üzerinden kaydettim.`,
+          text: `✅ ${amount.toLocaleString('tr-TR')} ₺ ${cebiExpenseCategoryLabel(cebiExpenseCategory(pendingExpenseText))} harcamasını ${source.name} üzerinden kaydettim.`,
           timestamp: new Date().toISOString(),
         };
         setAppData((prev) => ({ ...prev, coachMessages: [...prev.coachMessages, msg] }));
@@ -878,11 +934,11 @@ const handleAddIncome = (
             ? args.date.trim()
             : new Date().toISOString().slice(0, 10);
 
-        const note =
-          typeof args.note === 'string' &&
-          args.note.trim()
-            ? args.note.trim()
-            : `CEBİ AI: ${cleanText}`;
+        const actionSummary = cebiBuildExpenseSummary(
+          cleanText,
+          category,
+          paymentSourceName || 'Ödeme kaynağı belirtilmedi'
+        );
 
         handleAddExpense({
           amount,
@@ -891,7 +947,7 @@ const handleAddIncome = (
           paymentSourceId,
           paymentSourceName,
           paymentSourceType,
-          note,
+          note: actionSummary,
           isDebtPayment: false,
         });
 
@@ -1501,6 +1557,46 @@ const handleAddIncome = (
         }
       `}</style>
       {/* Navigation Bars */}
+      <style>{`
+        .cebi-dashboard-shell { overflow-x: hidden; }
+        .cebi-dashboard-shell * { min-width: 0; }
+        .cebi-dashboard-shell [class*="text-right"] {
+          min-width: 0 !important;
+          max-width: 100% !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+        }
+        .cebi-dashboard-shell [class*="bg-slate-900"],
+        .cebi-dashboard-shell [class*="bg-slate-950"],
+        .cebi-dashboard-shell [class*="bg-[#0f172a]"],
+        .cebi-dashboard-shell [class*="bg-[#111827]"] {
+          color: #ffffff !important;
+        }
+        .cebi-dashboard-shell [class*="bg-slate-900"] [class*="text-slate-900"],
+        .cebi-dashboard-shell [class*="bg-slate-950"] [class*="text-slate-900"],
+        .cebi-dashboard-shell [class*="bg-[#0f172a]"] [class*="text-slate-900"],
+        .cebi-dashboard-shell [class*="bg-[#111827]"] [class*="text-slate-900"] {
+          color: #ffffff !important;
+        }
+        .cebi-mobile-brand { display: none; }
+        @media (max-width: 640px) {
+          .cebi-mobile-brand {
+            display: block;
+            position: absolute;
+            top: 22px;
+            left: 82px;
+            z-index: 40;
+            font-weight: 800;
+            font-size: 16px;
+            line-height: 1.1;
+            color: #0f1b33;
+            pointer-events: none;
+          }
+        }
+      `}</style>
+
+      <div className="cebi-mobile-brand">CEBİ Finans Koçu</div>
+
       <Navbar
         currentTab={currentTab}
         onSelectTab={handleSelectTab}
@@ -1514,15 +1610,17 @@ const handleAddIncome = (
       {/* Main Content Viewport */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-6">
         {currentTab === 'dashboard' && (
-          <DashboardView
-            snapshot={snapshot}
+          <div className="cebi-dashboard-shell">
+            <DashboardView
+              snapshot={snapshot}
             expenses={appData.expenses}
             accounts={appData.accounts}
             incomes={appData.incomes}
             scheduledPayments={appData.scheduledPayments}
             onSelectTab={handleSelectTab}
-            onOpenQuickExpense={() => setIsQuickExpenseOpen(true)}
-          />
+              onOpenQuickExpense={() => setIsQuickExpenseOpen(true)}
+            />
+          </div>
         )}
 
         {currentTab === 'expenses' && (
