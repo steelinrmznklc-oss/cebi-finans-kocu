@@ -21,16 +21,17 @@ jobs:
           ref: android-apk
 
       # ============================================================
-      # 2. Node.js
+      # 2. Node.js Kurulumu
       # ============================================================
       - name: Node.js Kurulumu
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
 
       # ============================================================
       # 3. Bağımlılıkları yükle
+      #
+      # package-lock.json olmadığı için npm cache kullanılmıyor.
       # ============================================================
       - name: Bağımlılıkları Yükle
         run: npm install
@@ -49,9 +50,6 @@ jobs:
 
       # ============================================================
       # 6. Web uygulamasını Android için build et
-      #
-      # CAPACITOR_BUILD=true sayesinde Vite:
-      # ./ relative asset yollarını kullanır.
       # ============================================================
       - name: Web uygulamasını Android için build et
         run: CAPACITOR_BUILD=true npm run build
@@ -63,12 +61,10 @@ jobs:
         run: npx cap add android
 
       # ============================================================
-      # 8. CEBİ launcher icon kaynağını hazırla
+      # 8. CEBİ icon kaynağını hazırla
       #
       # Kaynak:
       # public/cebi-icon.png
-      #
-      # Bu dosya tek kaynak olarak kullanılacak.
       # ============================================================
       - name: CEBİ icon kaynağını hazırla
         run: |
@@ -76,24 +72,20 @@ jobs:
           cp public/cebi-icon.png resources/icon.png
 
       # ============================================================
-      # 9. Android launcher ikonlarını otomatik üret
-      #
-      # @capacitor/assets burada yalnızca build sırasında
-      # kullanılıyor. Repo'ya generated Android ikonlarını
-      # manuel olarak koymaya gerek yok.
+      # 9. Android launcher ikonlarını otomatik oluştur
       # ============================================================
       - name: CEBİ Android launcher ikonlarını oluştur
         run: |
           npx --yes @capacitor/assets generate --android
 
       # ============================================================
-      # 10. Capacitor web dosyalarını Android'e aktar
+      # 10. Capacitor sync
       # ============================================================
       - name: Capacitor sync
         run: npx cap sync android
 
       # ============================================================
-      # 11. Java JDK
+      # 11. Java JDK Kurulumu
       # ============================================================
       - name: Java JDK Kurulumu
         uses: actions/setup-java@v4
