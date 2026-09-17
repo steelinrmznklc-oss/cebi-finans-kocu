@@ -12,15 +12,19 @@ const PORT = Number(process.env.PORT || 3000);
 app.use(express.json({ limit: "2mb" }));
 
 /**
- * CEBİ V2
- * Mobil APK / Render / GitHub Pages / Local geliştirme için CORS
+ * =========================================================
+ * CEBİ — CORS
+ * =========================================================
  */
+
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
+
   res.header(
     "Access-Control-Allow-Headers",
     "Origin, X-Requested-With, Content-Type, Accept"
   );
+
   res.header(
     "Access-Control-Allow-Methods",
     "GET, POST, OPTIONS"
@@ -35,9 +39,14 @@ app.use((req, res, next) => {
 });
 
 /**
- * Gemini istemcisini gerektiğinde oluştur.
- * API anahtarı hiçbir şekilde APK içine konmaz.
+ * =========================================================
+ * GEMINI
+ * =========================================================
+ *
+ * API anahtarı sadece server tarafında tutulur.
+ * APK içine Gemini API key konmaz.
  */
+
 let aiClient: GoogleGenAI | null = null;
 
 function getGenAI(): GoogleGenAI | null {
@@ -62,8 +71,11 @@ function getGenAI(): GoogleGenAI | null {
 }
 
 /**
- * Sağlık kontrolü
+ * =========================================================
+ * HEALTH CHECK
+ * =========================================================
  */
+
 app.get("/api/health", (_req: Request, res: Response) => {
   res.json({
     status: "ok",
@@ -72,23 +84,24 @@ app.get("/api/health", (_req: Request, res: Response) => {
   });
 });
 
-/* =========================================================
-   CEBİ V2 — AI TOOL DEFINITIONS
-   ========================================================= */
+/**
+ * =========================================================
+ * TOOL DEFINITIONS
+ * =========================================================
+ */
 
 /**
  * HARCAMA EKLE
- *
- * AI bu fonksiyonu seçer.
- * Gerçek kaydı React uygulaması yapar.
  */
+
 const addExpenseTool = {
   name: "add_expense",
+
   description:
-    "Kullanıcının GERÇEKTEN yaptığı bir harcamayı CEBİ'ye kaydetmek için kullanılır. " +
-    "Kullanıcı geçmişte veya bugün gerçekten harcama yaptığını söylüyorsa kullan. " +
-    "Sadece gelecekte yapmayı düşündüğü harcamalarda kullanma. " +
-    "Tutar, kategori, tarih ve ödeme kaynağı yeterince belirliyse işlem oluştur.",
+    "Kullanıcının GERÇEKTEN yaptığı bir tüketim harcamasını CEBİ'ye kaydetmek için kullanılır. " +
+    "Kullanıcı gerçekten para harcadığını söylüyorsa ve tutar, kategori, tarih ve ödeme kaynağı yeterince belirliyse kullan. " +
+    "Gelecekte yapılacak veya sadece planlanan harcamalarda kullanma. " +
+    "Kredi kartı borcu, kredi taksiti, KMH veya başka borç kapatma işlemlerini bu tool ile kaydetme; bunlar make_debt_payment işlemidir.",
 
   parameters: {
     type: Type.OBJECT,
@@ -96,11 +109,13 @@ const addExpenseTool = {
     properties: {
       amount: {
         type: Type.NUMBER,
-        description: "Harcama tutarı. Türk Lirası cinsinden.",
+        description:
+          "Harcama tutarı. Türk Lirası cinsinden pozitif sayı.",
       },
 
       category: {
         type: Type.STRING,
+
         enum: [
           "market",
           "yemek",
@@ -120,40 +135,46 @@ const addExpenseTool = {
           "vergi",
           "diger",
         ],
+
         description:
-          "Harcamanın CEBİ içindeki kategorisi.",
+          "Harcamanın CEBİ içindeki kategori değeri.",
       },
 
       date: {
         type: Type.STRING,
+
         description:
-          "Harcama tarihi. YYYY-MM-DD formatında. Kullanıcı tarih belirtmediyse bugün.",
+          "Harcama tarihi. YYYY-MM-DD formatında. Kullanıcı tarih belirtmediyse bugünün tarihi.",
       },
 
       paymentSourceId: {
         type: Type.STRING,
+
         description:
-          "Harcamanın yapıldığı CEBİ ödeme kaynağının ID'si. " +
-          "Banka hesabı veya kredi kartı ID'si kullanılmalı. " +
-          "Nakit için 'cash' kullanılabilir.",
+          "Harcamanın yapıldığı CEBİ ödeme kaynağının GERÇEK ID'si. " +
+          "Sadece gönderilen banka hesabı veya kredi kartı ID'lerinden biri kullanılabilir. " +
+          "Nakit için yalnızca 'cash' kullanılabilir. ID uydurma.",
       },
 
       paymentSourceType: {
         type: Type.STRING,
+
         enum: [
           "bank_account",
           "credit_card",
           "cash",
           "other",
         ],
+
         description:
           "Ödeme kaynağının tipi.",
       },
 
       note: {
         type: Type.STRING,
+
         description:
-          "Harcamanın kısa açıklaması. Örneğin 'Market alışverişi'.",
+          "Kısa ve anlaşılır harcama açıklaması. Örneğin 'Market alışverişi'.",
       },
     },
 
@@ -171,12 +192,14 @@ const addExpenseTool = {
 /**
  * GELİR EKLE
  */
+
 const addIncomeTool = {
   name: "add_income",
+
   description:
-    "Kullanıcının GERÇEKTEN aldığı veya hesabına yatan bir geliri CEBİ'ye kaydetmek için kullanılır. " +
+    "Kullanıcının GERÇEKTEN aldığı veya hesabına yatırılmış bir geliri CEBİ'ye kaydetmek için kullanılır. " +
     "Maaş, avans, freelance ödeme, kira geliri veya diğer gerçek gelirler için kullanılabilir. " +
-    "Kullanıcı gelirinin yatırıldığı banka hesabını belirtiyorsa targetAccountId olarak gerçek hesap ID'sini kullan.",
+    "Gelirin yatırıldığı banka hesabı belirtiliyorsa gerçek targetAccountId kullanılmalıdır.",
 
   parameters: {
     type: Type.OBJECT,
@@ -184,17 +207,21 @@ const addIncomeTool = {
     properties: {
       amount: {
         type: Type.NUMBER,
-        description: "Gelir tutarı. Türk Lirası cinsinden pozitif sayı.",
+
+        description:
+          "Gelir tutarı. Türk Lirası cinsinden pozitif sayı.",
       },
 
       name: {
         type: Type.STRING,
+
         description:
-          "Gelirin adı. Örneğin 'Maaş', 'Avans', 'Freelance ödeme'.",
+          "Gelirin kısa adı. Örneğin Maaş, Avans veya Freelance ödeme.",
       },
 
       category: {
         type: Type.STRING,
+
         enum: [
           "maas",
           "avans",
@@ -203,43 +230,52 @@ const addIncomeTool = {
           "kira",
           "diger",
         ],
-        description: "Gelirin CEBİ kategori değeri.",
+
+        description:
+          "Gelirin CEBİ kategori değeri.",
       },
 
       paymentDate: {
         type: Type.STRING,
+
         description:
-          "Gelirin hesaba geçtiği tarih. YYYY-MM-DD formatında. Kullanıcı tarih belirtmezse bugünün tarihini kullan.",
+          "Gelirin hesaba geçtiği tarih. YYYY-MM-DD formatında.",
       },
 
       frequency: {
         type: Type.STRING,
+
         enum: [
           "monthly",
           "one_time",
           "biweekly",
           "weekly",
         ],
+
         description:
-          "Gelirin tekrarlanma sıklığı. Maaş gibi düzenli gelirlerde monthly, tek seferlik gelirlerde one_time kullan.",
+          "Gelirin tekrar sıklığı.",
       },
 
       isRecurring: {
         type: Type.BOOLEAN,
+
         description:
           "Gelir düzenli olarak tekrar ediyor mu?",
       },
 
       dayOfMonth: {
         type: Type.NUMBER,
+
         description:
-          "Düzenli aylık gelirlerde ödeme günü. 1 ile 31 arasında.",
+          "Aylık düzenli gelirlerde ödeme günü. Biliniyorsa 1-31 arası.",
       },
 
       targetAccountId: {
         type: Type.STRING,
+
         description:
-          "Gelirin yatırıldığı CEBİ banka hesabının gerçek ID değeri. Kullanıcı hesap belirttiyse accounts listesinden doğru ID'yi seç. ID uydurma.",
+          "Gelirin yatırıldığı CEBİ banka hesabının GERÇEK ID'si. " +
+          "Sadece gönderilen accounts listesindeki ID'lerden biri kullanılabilir. ID uydurma.",
       },
     },
 
@@ -254,13 +290,16 @@ const addIncomeTool = {
     ],
   },
 };
+
 /**
  * BORÇ ÖDEME
  */
+
 const makeDebtPaymentTool = {
   name: "make_debt_payment",
+
   description:
-    "Kullanıcının GERÇEKTEN yaptığı bir kredi kartı, kredi, KMH veya diğer borç ödemesini CEBİ'ye kaydetmek için kullanılır. " +
+    "Kullanıcının GERÇEKTEN yaptığı kredi kartı, kredi, KMH veya diğer borç ödemesini CEBİ'ye kaydetmek için kullanılır. " +
     "Tüketim harcaması ile borç ödemesini birbirine karıştırma.",
 
   parameters: {
@@ -269,31 +308,37 @@ const makeDebtPaymentTool = {
     properties: {
       debtType: {
         type: Type.STRING,
+
         enum: [
           "card",
           "loan",
           "kmh",
           "other",
         ],
-        description: "Ödenen borcun tipi.",
+
+        description:
+          "Ödenen borcun tipi.",
       },
 
       debtId: {
         type: Type.STRING,
+
         description:
-          "Ödenen borcun CEBİ içindeki ID'si.",
+          "Ödenen borcun CEBİ içindeki GERÇEK ID'si. ID uydurma.",
       },
 
       amount: {
         type: Type.NUMBER,
+
         description:
-          "Ödenen borç tutarı. Türk Lirası.",
+          "Ödenen borç tutarı. Türk Lirası cinsinden pozitif sayı.",
       },
 
       bankAccountId: {
         type: Type.STRING,
+
         description:
-          "Ödemenin yapıldığı banka hesabının CEBİ ID'si.",
+          "Ödemenin yapıldığı banka hesabının GERÇEK CEBİ ID'si. ID uydurma.",
       },
     },
 
@@ -307,10 +352,9 @@ const makeDebtPaymentTool = {
 };
 
 /**
- * =========================================================
  * TOOL LİSTESİ
- * =========================================================
  */
+
 const cebiTools = [
   addExpenseTool,
   addIncomeTool,
@@ -319,70 +363,287 @@ const cebiTools = [
 
 /**
  * =========================================================
- * YARDIMCI FONKSİYONLAR
+ * GENEL YARDIMCI FONKSİYONLAR
  * =========================================================
  */
 
 function safeNumber(value: unknown): number {
   const n = Number(value);
+
   return Number.isFinite(n) ? n : 0;
 }
 
 function todayTR(): string {
   const now = new Date();
 
-  const formatter = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Istanbul",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  });
+  const formatter = new Intl.DateTimeFormat(
+    "en-CA",
+    {
+      timeZone: "Europe/Istanbul",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }
+  );
 
   return formatter.format(now);
 }
 
 function formatTL(value: unknown): string {
-  return safeNumber(value).toLocaleString("tr-TR");
+  return safeNumber(value).toLocaleString(
+    "tr-TR"
+  );
+}
+
+function normalizeTR(value: string): string {
+  return value
+    .toLocaleLowerCase("tr-TR")
+    .replace(/İ/g, "i")
+    .replace(/I/g, "i")
+    .replace(/ı/g, "i")
+    .replace(/ğ/g, "g")
+    .replace(/ü/g, "u")
+    .replace(/ş/g, "s")
+    .replace(/ö/g, "o")
+    .replace(/ç/g, "c")
+    .trim();
 }
 
 /**
- * Hesapları/kartları Gemini'nin kolay anlayacağı metne çevirir.
+ * =========================================================
+ * TÜRKÇE TUTAR PARSER
+ * =========================================================
  */
-function formatFinancialSources(body: any): string {
-  const accounts = Array.isArray(body?.accounts)
+
+function parseTurkishAmount(
+  text: string
+): number | null {
+  const normalized = normalizeTR(text);
+
+  /**
+   * Örnekler:
+   * 850 TL
+   * 850tl
+   * 850 lira
+   * 850₺
+   * 1.500 TL
+   * 1,500 TL
+   * 2.500,50 TL
+   */
+
+  const currencyMatch =
+    normalized.match(
+      /(\d{1,3}(?:[.\s]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)[\s]*(?:tl|lira|₺)\b/i
+    );
+
+  const rawMatch =
+    currencyMatch ||
+    normalized.match(
+      /(?:^|\s)(\d{2,7}(?:[.,]\d+)?)(?:\s|$)/i
+    );
+
+  if (!rawMatch) {
+    return null;
+  }
+
+  let raw = rawMatch[1]
+    .replace(/\s/g, "");
+
+  if (
+    raw.includes(".") &&
+    raw.includes(",")
+  ) {
+    raw = raw
+      .replace(/\./g, "")
+      .replace(",", ".");
+  } else if (raw.includes(",")) {
+    raw = raw.replace(",", ".");
+  } else if (
+    /^\d{1,3}\.\d{3}$/.test(raw)
+  ) {
+    raw = raw.replace(".", "");
+  }
+
+  const amount = Number(raw);
+
+  if (
+    !Number.isFinite(amount) ||
+    amount <= 0
+  ) {
+    return null;
+  }
+
+  return amount;
+}
+
+/**
+ * =========================================================
+ * TÜRKÇE SAYI KELİMELERİ
+ * =========================================================
+ */
+
+const TURKISH_NUMBER_VALUES: Record<
+  string,
+  number
+> = {
+  sifir: 0,
+  bir: 1,
+  iki: 2,
+  uc: 3,
+  dort: 4,
+  bes: 5,
+  alti: 6,
+  yedi: 7,
+  sekiz: 8,
+  dokuz: 9,
+  on: 10,
+  yirmi: 20,
+  otuz: 30,
+  kirk: 40,
+  elli: 50,
+  altmis: 60,
+  yetmis: 70,
+  seksen: 80,
+  doksan: 90,
+  yuz: 100,
+  bin: 1000,
+  milyon: 1000000,
+  milyar: 1000000000,
+};
+
+function parseTurkishWords(
+  text: string
+): number | null {
+  const q = normalizeTR(text);
+
+  /**
+   * Kelimeler arasında sayı ifadesi aranır.
+   *
+   * Örnek:
+   * "sekiz yüz elli lira"
+   * "iki bin beş yüz"
+   * "bin iki yüz elli"
+   */
+
+  const match = q.match(
+    /((?:sifir|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on|yirmi|otuz|kirk|elli|altmis|yetmis|seksen|doksan|yuz|bin|milyon|milyar)(?:\s+(?:sifir|bir|iki|uc|dort|bes|alti|yedi|sekiz|dokuz|on|yirmi|otuz|kirk|elli|altmis|yetmis|seksen|doksan|yuz|bin|milyon|milyar))*)\s*(?:tl|lira|₺)?/
+  );
+
+  if (!match) {
+    return null;
+  }
+
+  const words = match[1].split(/\s+/);
+
+  let total = 0;
+  let current = 0;
+
+  for (const word of words) {
+    const value =
+      TURKISH_NUMBER_VALUES[word];
+
+    if (value === undefined) {
+      continue;
+    }
+
+    if (
+      word === "bin" ||
+      word === "milyon" ||
+      word === "milyar"
+    ) {
+      if (current === 0) {
+        current = 1;
+      }
+
+      current *= value;
+      total += current;
+      current = 0;
+    } else if (word === "yuz") {
+      if (current === 0) {
+        current = 1;
+      }
+
+      current *= 100;
+    } else {
+      current += value;
+    }
+  }
+
+  total += current;
+
+  return total > 0 ? total : null;
+}
+
+/**
+ * =========================================================
+ * FİNANSAL KAYNAKLAR
+ * =========================================================
+ */
+
+function formatFinancialSources(
+  body: any
+): string {
+  const accounts = Array.isArray(
+    body?.accounts
+  )
     ? body.accounts
     : [];
 
-  const creditCards = Array.isArray(body?.creditCards)
+  const creditCards = Array.isArray(
+    body?.creditCards
+  )
     ? body.creditCards
     : [];
 
-  const loans = Array.isArray(body?.loans)
+  const loans = Array.isArray(
+    body?.loans
+  )
     ? body.loans
     : [];
 
-  const overdrafts = Array.isArray(body?.overdrafts)
+  const overdrafts = Array.isArray(
+    body?.overdrafts
+  )
     ? body.overdrafts
     : [];
 
-  const otherDebts = Array.isArray(body?.otherDebts)
+  const otherDebts = Array.isArray(
+    body?.otherDebts
+  )
     ? body.otherDebts
     : [];
 
   const lines: string[] = [];
 
+  lines.push(
+    "=================================================="
+  );
+  lines.push("CEBİ GERÇEK FİNANSAL KAYNAKLARI");
+  lines.push(
+    "=================================================="
+  );
+
+  lines.push("");
   lines.push("BANKA HESAPLARI:");
 
   if (accounts.length === 0) {
-    lines.push("- Kayıtlı banka hesabı yok.");
+    lines.push(
+      "- Kayıtlı banka hesabı yok."
+    );
   } else {
     for (const account of accounts) {
       lines.push(
-        `- ID: ${account.id} | Banka: ${
-          account.bankName || "Bilinmiyor"
+        `- ID: ${String(
+          account.id
+        )} | Banka: ${
+          account.bankName ||
+          "Bilinmiyor"
         } | Hesap: ${
-          account.accountName || "Bilinmiyor"
-        } | Bakiye: ${formatTL(account.balance)} ₺`
+          account.accountName ||
+          "Bilinmiyor"
+        } | Bakiye: ${formatTL(
+          account.balance
+        )} ₺`
       );
     }
   }
@@ -391,14 +652,22 @@ function formatFinancialSources(body: any): string {
   lines.push("KREDİ KARTLARI:");
 
   if (creditCards.length === 0) {
-    lines.push("- Kayıtlı kredi kartı yok.");
+    lines.push(
+      "- Kayıtlı kredi kartı yok."
+    );
   } else {
     for (const card of creditCards) {
       lines.push(
-        `- ID: ${card.id} | Banka: ${
-          card.bank || card.bankName || "Bilinmiyor"
+        `- ID: ${String(
+          card.id
+        )} | Banka: ${
+          card.bank ||
+          card.bankName ||
+          "Bilinmiyor"
         } | Kart: ${
-          card.cardName || card.name || "Bilinmiyor"
+          card.cardName ||
+          card.name ||
+          "Bilinmiyor"
         } | Mevcut Borç: ${formatTL(
           card.currentDebt
         )} ₺ | Kullanılabilir Limit: ${formatTL(
@@ -412,14 +681,21 @@ function formatFinancialSources(body: any): string {
   lines.push("KREDİLER:");
 
   if (loans.length === 0) {
-    lines.push("- Kayıtlı kredi yok.");
+    lines.push(
+      "- Kayıtlı kredi yok."
+    );
   } else {
     for (const loan of loans) {
       lines.push(
-        `- ID: ${loan.id} | Banka: ${
-          loan.bank || "Bilinmiyor"
+        `- ID: ${String(
+          loan.id
+        )} | Banka: ${
+          loan.bank ||
+          "Bilinmiyor"
         } | Kredi: ${
-          loan.loanName || loan.name || "Bilinmiyor"
+          loan.loanName ||
+          loan.name ||
+          "Bilinmiyor"
         } | Kalan Anapara: ${formatTL(
           loan.remainingPrincipal
         )} ₺`
@@ -431,14 +707,20 @@ function formatFinancialSources(body: any): string {
   lines.push("KMH / EK HESAP:");
 
   if (overdrafts.length === 0) {
-    lines.push("- Kayıtlı KMH yok.");
+    lines.push(
+      "- Kayıtlı KMH yok."
+    );
   } else {
     for (const overdraft of overdrafts) {
       lines.push(
-        `- ID: ${overdraft.id} | Banka: ${
-          overdraft.bank || "Bilinmiyor"
+        `- ID: ${String(
+          overdraft.id
+        )} | Banka: ${
+          overdraft.bank ||
+          "Bilinmiyor"
         } | Hesap: ${
-          overdraft.accountName || "Bilinmiyor"
+          overdraft.accountName ||
+          "Bilinmiyor"
         } | Kullanılan: ${formatTL(
           overdraft.usedAmount
         )} ₺`
@@ -450,12 +732,18 @@ function formatFinancialSources(body: any): string {
   lines.push("DİĞER BORÇLAR:");
 
   if (otherDebts.length === 0) {
-    lines.push("- Kayıtlı diğer borç yok.");
+    lines.push(
+      "- Kayıtlı diğer borç yok."
+    );
   } else {
     for (const debt of otherDebts) {
       lines.push(
-        `- ID: ${debt.id} | Borç: ${
-          debt.debtName || debt.name || "Bilinmiyor"
+        `- ID: ${String(
+          debt.id
+        )} | Borç: ${
+          debt.debtName ||
+          debt.name ||
+          "Bilinmiyor"
         } | Tutar: ${formatTL(
           debt.amount
         )} ₺`
@@ -467,16 +755,25 @@ function formatFinancialSources(body: any): string {
 }
 
 /**
- * Snapshot'ı AI için okunabilir hale getirir.
+ * =========================================================
+ * SNAPSHOT FORMAT
+ * =========================================================
  */
-function formatSnapshot(snapshot: any): string {
+
+function formatSnapshot(
+  snapshot: any
+): string {
   const categoryBreakdown =
-    Array.isArray(snapshot?.categoryBreakdown) &&
+    Array.isArray(
+      snapshot?.categoryBreakdown
+    ) &&
     snapshot.categoryBreakdown.length > 0
       ? snapshot.categoryBreakdown
           .map(
             (c: any) =>
-              `- ${c.name}: ${formatTL(c.amount)} ₺ (%${
+              `- ${c.name}: ${formatTL(
+                c.amount
+              )} ₺ (%${
                 c.percentage || 0
               })`
           )
@@ -484,7 +781,9 @@ function formatSnapshot(snapshot: any): string {
       : "Henüz harcama kaydı yok.";
 
   const debtDetails =
-    Array.isArray(snapshot?.debtDetails) &&
+    Array.isArray(
+      snapshot?.debtDetails
+    ) &&
     snapshot.debtDetails.length > 0
       ? snapshot.debtDetails
           .map(
@@ -494,24 +793,30 @@ function formatSnapshot(snapshot: any): string {
               )} ₺, Asgari/Taksit: ${formatTL(
                 d.monthlyOrMin || 0
               )} ₺, Vade/Ödeme: ${
-                d.dueDate || "Belirtilmemiş"
+                d.dueDate ||
+                "Belirtilmemiş"
               }`
           )
           .join("\n")
       : "Kayıtlı borç bulunmuyor.";
 
   const incomes =
-    Array.isArray(snapshot?.incomes) &&
+    Array.isArray(
+      snapshot?.incomes
+    ) &&
     snapshot.incomes.length > 0
       ? snapshot.incomes
           .map(
             (i: any) =>
-              `- ${i.name}: ${formatTL(i.amount)} ₺ (${
+              `- ${i.name}: ${formatTL(
+                i.amount
+              )} ₺ (${
                 i.isRecurring
                   ? "Her ay düzenli"
                   : "Tek seferlik"
               }, Ödeme Günü: ${
-                i.paymentDate || "Belirtilmemiş"
+                i.paymentDate ||
+                "Belirtilmemiş"
               })`
           )
           .join("\n")
@@ -523,39 +828,58 @@ KULLANICI FİNANSAL ANLIK DURUMU:
 - Toplam Mevcut Para / Banka Bakiyesi: ${formatTL(
     snapshot?.totalBalance
   )} ₺
+
 - Aylık Planlanan Gelir: ${formatTL(
     snapshot?.monthlyIncome
   )} ₺
+
 - Fiilen Yatan Gelir: ${formatTL(
     snapshot?.realizedMonthlyIncome ??
       snapshot?.monthlyIncome
   )} ₺
+
 - Beklenen Gelecek Gelir: ${formatTL(
     snapshot?.pendingMonthlyIncome
   )} ₺
+
 - Bu Ay Tüketim Harcamaları: ${formatTL(
     snapshot?.monthlyExpenses
   )} ₺
+
 - Bu Ay Borç Geri Ödemeleri: ${formatTL(
     snapshot?.totalDebtRepayments
   )} ₺
+
 - Kalan Bütçe: ${formatTL(
     snapshot?.remainingBudget
   )} ₺
-- Kalan Gün: ${snapshot?.remainingDays || 0}
+
+- Kalan Gün: ${
+    snapshot?.remainingDays || 0
+  }
+
 - Yaklaşan Zorunlu Ödemeler: ${formatTL(
     snapshot?.upcomingPaymentsTotal
   )} ₺
+
 - Net Likit: ${formatTL(
     snapshot?.netLiquidAvailable ??
-      safeNumber(snapshot?.totalBalance) -
-        safeNumber(snapshot?.upcomingPaymentsTotal)
+      safeNumber(
+        snapshot?.totalBalance
+      ) -
+        safeNumber(
+          snapshot?.upcomingPaymentsTotal
+        )
   )} ₺
+
 - Nakit Açığı: ${
     snapshot?.hasCashShortfall
-      ? `${formatTL(snapshot?.cashShortfall)} ₺`
+      ? `${formatTL(
+          snapshot?.cashShortfall
+        )} ₺`
       : "Yok"
   }
+
 - Günlük Güvenli Harcama: ${
     snapshot?.hasCashShortfall
       ? "0 ₺"
@@ -563,21 +887,27 @@ KULLANICI FİNANSAL ANLIK DURUMU:
           snapshot?.dailySafeSpending
         )} ₺`
   }
+
 - Planlanan Günlük Bütçe: ${formatTL(
     snapshot?.plannedDailyBudget
   )} ₺
+
 - Toplam Borç: ${formatTL(
     snapshot?.totalDebt
   )} ₺
+
 - Kredi Kartı Borcu: ${formatTL(
     snapshot?.creditCardDebt
   )} ₺
+
 - Kredi Anapara Borcu: ${formatTL(
     snapshot?.loanDebt
   )} ₺
+
 - KMH Borcu: ${formatTL(
     snapshot?.overdraftDebt
   )} ₺
+
 - Diğer Borçlar: ${formatTL(
     snapshot?.otherDebt
   )} ₺
@@ -594,126 +924,569 @@ ${incomes}
 }
 
 /**
- * Sohbet geçmişini güvenli şekilde metne çevir.
+ * =========================================================
+ * KONUŞMA GEÇMİŞİ
+ * =========================================================
  */
-function formatConversationHistory(
-  conversationHistory: any,
-  history: any
-): string {
-  const source =
-    Array.isArray(conversationHistory)
-      ? conversationHistory
-      : Array.isArray(history)
-      ? history
-      : [];
 
-  if (source.length === 0) {
-    return "Önceki konuşma bulunmuyor.";
+function normalizeHistoryRole(
+  item: any
+): "user" | "model" {
+  if (
+    item?.role === "user" ||
+    item?.sender === "user"
+  ) {
+    return "user";
   }
 
-  return source
-    .slice(-10)
-    .map((item: any) => {
-      const role =
-        item.sender === "user" ||
-        item.role === "user"
-          ? "Kullanıcı"
-          : "CEBİ Koç";
-
-      const text =
-        item.text ||
-        item.content ||
-        item.message ||
-        "";
-
-      return `${role}: ${text}`;
-    })
-    .join("\n");
+  return "model";
 }
 
-/* =========================================================
-   FALLBACK
-   ========================================================= */
+function getHistoryText(
+  item: any
+): string {
+  return String(
+    item?.text ||
+      item?.content ||
+      item?.message ||
+      ""
+  ).trim();
+}
+
+/**
+ * Gemini'nin generateContent API'sine verilecek
+ * çok turlu konuşma içeriğini oluşturur.
+ */
+function buildGeminiContents(
+  conversationHistory: any,
+  currentMessage: string
+): Array<{
+  role: "user" | "model";
+  parts: Array<{ text: string }>;
+}> {
+  const history = Array.isArray(
+    conversationHistory
+  )
+    ? conversationHistory
+    : [];
+
+  const contents: Array<{
+    role: "user" | "model";
+    parts: Array<{ text: string }>;
+  }> = [];
+
+  for (const item of history.slice(-20)) {
+    const text = getHistoryText(item);
+
+    if (!text) {
+      continue;
+    }
+
+    contents.push({
+      role: normalizeHistoryRole(item),
+      parts: [
+        {
+          text,
+        },
+      ],
+    });
+  }
+
+  /**
+   * Mevcut kullanıcı mesajını geçmişe ayrıca ekle.
+   */
+  if (currentMessage.trim()) {
+    contents.push({
+      role: "user",
+      parts: [
+        {
+          text: currentMessage.trim(),
+        },
+      ],
+    });
+  }
+
+  /**
+   * Gemini tarafında ilk mesajın user olması
+   * konuşma formatını daha güvenli tutar.
+   */
+  if (
+    contents.length > 0 &&
+    contents[0].role !== "user"
+  ) {
+    contents.unshift({
+      role: "user",
+      parts: [
+        {
+          text:
+            "CEBİ finans koçu görüşmesi başlıyor.",
+        },
+      ],
+    });
+  }
+
+  return contents;
+}
+
+/**
+ * =========================================================
+ * FALLBACK EXPENSE HELPERS
+ * =========================================================
+ */
+
+function detectExpenseCategory(
+  text: string
+): string {
+  const q = normalizeTR(text);
+
+  if (
+    /market|migros|carrefour|bim|a101|sok/.test(
+      q
+    )
+  ) {
+    return "market";
+  }
+
+  if (
+    /restoran|lokanta|kafe|kahve|yemek|pizza|burger/.test(
+      q
+    )
+  ) {
+    return "yemek";
+  }
+
+  if (
+    /benzin|mazot|akaryakit|petrol|opet|shell|bp/.test(
+      q
+    )
+  ) {
+    return "akaryakit";
+  }
+
+  if (
+    /fatura|elektrik|su fatur|dogalgaz|internet fatur/.test(
+      q
+    )
+  ) {
+    return "fatura";
+  }
+
+  if (/kira/.test(q)) {
+    return "kira";
+  }
+
+  if (
+    /ulasim|otobus|metro|taksi|uber|dolmus/.test(
+      q
+    )
+  ) {
+    return "ulasim";
+  }
+
+  if (
+    /saglik|eczane|doktor|ilac|hastane/.test(
+      q
+    )
+  ) {
+    return "saglik";
+  }
+
+  if (
+    /giyim|elbise|ayakkabi|pantolon|mont/.test(
+      q
+    )
+  ) {
+    return "giyim";
+  }
+
+  if (
+    /elektronik|telefon|laptop|bilgisayar|tablet/.test(
+      q
+    )
+  ) {
+    return "elektronik";
+  }
+
+  if (
+    /abonelik|netflix|spotify|youtube premium/.test(
+      q
+    )
+  ) {
+    return "abonelik";
+  }
+
+  if (
+    /egitim|kurs|okul|ders/.test(q)
+  ) {
+    return "egitim";
+  }
+
+  if (
+    /eglence|sinema|konser|oyun/.test(
+      q
+    )
+  ) {
+    return "eglence";
+  }
+
+  if (
+    /alisveris|magaza/.test(q)
+  ) {
+    return "alisveris";
+  }
+
+  if (
+    /ev esyasi|mobilya|ev/.test(q)
+  ) {
+    return "ev";
+  }
+
+  if (
+    /sigorta/.test(q)
+  ) {
+    return "sigorta";
+  }
+
+  if (
+    /vergi/.test(q)
+  ) {
+    return "vergi";
+  }
+
+  return "diger";
+}
+
+function isCompletedExpenseStatement(
+  text: string
+): boolean {
+  const q = normalizeTR(text);
+
+  const completed =
+    /\b(yaptim|harcadim|harcama yaptim|odeme yaptim|odedim|aldim|satin aldim|alisveris yaptim|harcadik|aldik)\b/.test(
+      q
+    );
+
+  const futureOrQuestion =
+    /(yapacagim|harcayacagim|odeyecegim|alacagim|yapabilir miyim|harcayabilir miyim|alabilir miyim|yapsam|alsam|harcasam)/.test(
+      q
+    );
+
+  return (
+    completed &&
+    !futureOrQuestion
+  );
+}
+
+function findExplicitExpenseSource(
+  text: string,
+  data: any
+) {
+  const q = normalizeTR(text);
+
+  const cards = Array.isArray(
+    data?.creditCards
+  )
+    ? data.creditCards
+    : [];
+
+  const accounts = Array.isArray(
+    data?.accounts
+  )
+    ? data.accounts
+    : [];
+
+  /**
+   * Önce kredi kartlarını kontrol et.
+   */
+
+  for (const card of cards) {
+    const bank = normalizeTR(
+      String(
+        card.bank ||
+          card.bankName ||
+          ""
+      )
+    );
+
+    const name = normalizeTR(
+      String(
+        card.cardName ||
+          card.name ||
+          ""
+      )
+    );
+
+    if (
+      (bank && q.includes(bank)) ||
+      (name && q.includes(name))
+    ) {
+      return {
+        id: String(card.id),
+        type: "credit_card",
+        name: `${card.bank || card.bankName || ""} - ${
+          card.cardName ||
+          card.name ||
+          ""
+        }`.trim(),
+      };
+    }
+  }
+
+  /**
+   * Sonra banka hesapları.
+   */
+
+  for (const account of accounts) {
+    const bank = normalizeTR(
+      String(
+        account.bankName || ""
+      )
+    );
+
+    const name = normalizeTR(
+      String(
+        account.accountName || ""
+      )
+    );
+
+    if (
+      (bank && q.includes(bank)) ||
+      (name && q.includes(name))
+    ) {
+      return {
+        id: String(account.id),
+        type: "bank_account",
+        name: `${account.bankName || ""} - ${
+          account.accountName || ""
+        }`.trim(),
+      };
+    }
+  }
+
+  /**
+   * Nakit.
+   */
+
+  if (
+    /nakit|cash/.test(q)
+  ) {
+    return {
+      id: "cash",
+      type: "cash",
+      name: "Nakit",
+    };
+  }
+
+  /**
+   * Yalnızca bir kredi kartı varsa
+   * "kartımla" gibi ifadelerde kullanılabilir.
+   */
+
+  if (
+    cards.length === 1 &&
+    /kart|kredi/.test(q)
+  ) {
+    const card = cards[0];
+
+    return {
+      id: String(card.id),
+      type: "credit_card",
+      name: `${card.bank || card.bankName || ""} - ${
+        card.cardName ||
+        card.name ||
+        ""
+      }`.trim(),
+    };
+  }
+
+  /**
+   * Yalnızca bir banka hesabı varsa
+   * "hesabımdan" gibi ifadelerde kullanılabilir.
+   */
+
+  if (
+    accounts.length === 1 &&
+    /hesabimdan|bankadan|hesabim/.test(q)
+  ) {
+    const account = accounts[0];
+
+    return {
+      id: String(account.id),
+      type: "bank_account",
+      name: `${account.bankName || ""} - ${
+        account.accountName || ""
+      }`.trim(),
+    };
+  }
+
+  return null;
+}
+
+function tryBuildExpenseAction(
+  text: string,
+  date: string,
+  data: any
+) {
+  if (
+    !isCompletedExpenseStatement(text)
+  ) {
+    return null;
+  }
+
+  let amount =
+    parseTurkishAmount(text);
+
+  if (!amount) {
+    amount =
+      parseTurkishWords(text);
+  }
+
+  if (!amount) {
+    return null;
+  }
+
+  const source =
+    findExplicitExpenseSource(
+      text,
+      data
+    );
+
+  if (!source) {
+    return null;
+  }
+
+  return {
+    name: "add_expense",
+
+    args: {
+      amount,
+
+      category:
+        detectExpenseCategory(text),
+
+      date,
+
+      paymentSourceId:
+        source.id,
+
+      paymentSourceType:
+        source.type,
+
+      note:
+        text.trim(),
+    },
+  };
+}
+
+/**
+ * =========================================================
+ * FALLBACK COACH
+ * =========================================================
+ */
 
 function generateFallbackCoachReply(
   question: string,
   snapshot: any
 ): string {
-  const q = question.toLowerCase();
+  const q = normalizeTR(question);
 
   const safeDaily = safeNumber(
     snapshot?.dailySafeSpending
   );
 
-  const remainingBudget = safeNumber(
-    snapshot?.remainingBudget
-  );
+  const remainingBudget =
+    safeNumber(
+      snapshot?.remainingBudget
+    );
 
-  const totalBalance = safeNumber(
-    snapshot?.totalBalance
-  );
+  const totalBalance =
+    safeNumber(
+      snapshot?.totalBalance
+    );
 
-  const totalDebt = safeNumber(
-    snapshot?.totalDebt
-  );
+  const totalDebt =
+    safeNumber(
+      snapshot?.totalDebt
+    );
 
-  const monthlyIncome = safeNumber(
-    snapshot?.monthlyIncome
-  );
+  const monthlyIncome =
+    safeNumber(
+      snapshot?.monthlyIncome
+    );
 
-  const monthlyExpenses = safeNumber(
-    snapshot?.monthlyExpenses
-  );
+  const monthlyExpenses =
+    safeNumber(
+      snapshot?.monthlyExpenses
+    );
 
-  const totalDebtRepayments = safeNumber(
-    snapshot?.totalDebtRepayments
-  );
+  const totalDebtRepayments =
+    safeNumber(
+      snapshot?.totalDebtRepayments
+    );
 
-  const upcomingPaymentsTotal = safeNumber(
-    snapshot?.upcomingPaymentsTotal
-  );
+  const upcomingPaymentsTotal =
+    safeNumber(
+      snapshot?.upcomingPaymentsTotal
+    );
 
-  const remainingDays = Math.max(
-    1,
-    safeNumber(snapshot?.remainingDays)
-  );
+  const remainingDays =
+    Math.max(
+      1,
+      safeNumber(
+        snapshot?.remainingDays
+      )
+    );
 
-  const hasCashShortfall = Boolean(
-    snapshot?.hasCashShortfall ||
-      (totalBalance < upcomingPaymentsTotal &&
-        upcomingPaymentsTotal > 0)
-  );
+  const hasCashShortfall =
+    Boolean(
+      snapshot?.hasCashShortfall ||
+        (
+          totalBalance <
+            upcomingPaymentsTotal &&
+          upcomingPaymentsTotal > 0
+        )
+    );
 
-  const cashShortfall = safeNumber(
-    snapshot?.cashShortfall ||
-      (hasCashShortfall
-        ? upcomingPaymentsTotal - totalBalance
-        : 0)
-  );
+  const cashShortfall =
+    safeNumber(
+      snapshot?.cashShortfall ||
+        (
+          hasCashShortfall
+            ? upcomingPaymentsTotal -
+              totalBalance
+            : 0
+        )
+    );
 
-  const plannedDailyBudget = safeNumber(
-    snapshot?.plannedDailyBudget
-  );
+  const plannedDailyBudget =
+    safeNumber(
+      snapshot?.plannedDailyBudget
+    );
 
-  const debtDetails = Array.isArray(
-    snapshot?.debtDetails
-  )
-    ? snapshot.debtDetails
-    : [];
+  const debtDetails =
+    Array.isArray(
+      snapshot?.debtDetails
+    )
+      ? snapshot.debtDetails
+      : [];
 
   if (
-    q.includes("ne kadar harcadım") ||
+    q.includes("ne kadar harcadim") ||
     q.includes("toplam harcamam") ||
-    q.includes("harcamalarım")
+    q.includes("harcamalarim")
   ) {
-    let text = `Bu ay toplam **${formatTL(
-      monthlyExpenses
-    )} ₺** tüketim harcaması yaptın.`;
+    let text =
+      `Bu ay toplam **${formatTL(
+        monthlyExpenses
+      )} ₺** tüketim harcaması yaptın.`;
 
-    if (totalDebtRepayments > 0) {
-      text += `\n\nAyrıca borç kapatma ve taksit ödemeleri için **${formatTL(
-        totalDebtRepayments
-      )} ₺** ödeme gerçekleştirdin. Bu tüketim harcaması değildir.`;
+    if (
+      totalDebtRepayments > 0
+    ) {
+      text +=
+        `\n\nAyrıca borç kapatma ve taksit ödemeleri için **${formatTL(
+          totalDebtRepayments
+        )} ₺** ödeme gerçekleştirdin. Bu tüketim harcaması değildir.`;
     }
 
     return text;
@@ -721,8 +1494,8 @@ function generateFallbackCoachReply(
 
   if (
     q.includes("bankada ne kadar") ||
-    q.includes("hesabımda ne kadar") ||
-    q.includes("kaç param var") ||
+    q.includes("hesabimda ne kadar") ||
+    q.includes("kac param var") ||
     q.includes("param var")
   ) {
     return `CEBİ'ye kayıtlı banka hesaplarındaki toplam kullanılabilir nakit bakiyen **${formatTL(
@@ -732,14 +1505,19 @@ function generateFallbackCoachReply(
 
   if (
     q.includes("toplam borcum") ||
-    (q.includes("borcum") &&
-      q.includes("ne kadar"))
+    (
+      q.includes("borcum") &&
+      q.includes("ne kadar")
+    )
   ) {
-    let reply = `Şu anki toplam kayıtlı borcun **${formatTL(
-      totalDebt
-    )} ₺** seviyesinde.`;
+    let reply =
+      `Şu anki toplam kayıtlı borcun **${formatTL(
+        totalDebt
+      )} ₺** seviyesinde.`;
 
-    if (debtDetails.length > 0) {
+    if (
+      debtDetails.length > 0
+    ) {
       reply +=
         "\n\nBorç Dağılımı:\n" +
         debtDetails
@@ -756,11 +1534,13 @@ function generateFallbackCoachReply(
   }
 
   if (
-    q.includes("güvenli olarak") ||
-    q.includes("güvenli harcama") ||
-    q.includes("bugün ne kadar")
+    q.includes("guvenli olarak") ||
+    q.includes("guvenli harcama") ||
+    q.includes("bugun ne kadar")
   ) {
-    if (hasCashShortfall) {
+    if (
+      hasCashShortfall
+    ) {
       return `Şu anda banka hesabında **${formatTL(
         totalBalance
       )} ₺** nakit bulunurken, ay sonuna kadar **${formatTL(
@@ -779,10 +1559,12 @@ function generateFallbackCoachReply(
 
   if (
     q.includes("hangi borcumu") ||
-    q.includes("borç kapat") ||
-    q.includes("borç öde")
+    q.includes("borc kapat") ||
+    q.includes("borc ode")
   ) {
-    if (totalDebt === 0) {
+    if (
+      totalDebt === 0
+    ) {
       return `**Durumun:** Kayıtlı borcun bulunmuyor.\n\nBorçsuz durumunu korumaya ve acil durum fonu oluşturmaya odaklanabilirsin.`;
     }
 
@@ -792,21 +1574,27 @@ function generateFallbackCoachReply(
   }
 
   if (
-    q.includes("alışveriş") ||
+    q.includes("alisveris") ||
     q.includes("alabilir miyim") ||
     q.includes("harcayabilir miyim")
   ) {
-    const match = q.match(/(\d+[\d\.,]*)/);
+    const match =
+      q.match(
+        /(\d+[\d\.,]*)/
+      );
 
-    const amount = match
-      ? parseFloat(
-          match[1]
-            .replace(/\./g, "")
-            .replace(",", ".")
-        )
-      : 0;
+    const amount =
+      match
+        ? parseFloat(
+            match[1]
+              .replace(/\./g, "")
+              .replace(",", ".")
+          )
+        : 0;
 
-    if (hasCashShortfall) {
+    if (
+      hasCashShortfall
+    ) {
       return `Şu anda **${formatTL(
         cashShortfall
       )} ₺** nakit açığın var. Bu nedenle **${formatTL(
@@ -835,12 +1623,15 @@ function generateFallbackCoachReply(
   }
 
   if (
-    q.includes("fazla mı harcadım") ||
-    q.includes("harcamalarımda sorun var mı")
+    q.includes("fazla mi harcadim") ||
+    q.includes("harcamalarimda sorun var mi")
   ) {
     const spentRatio =
       monthlyIncome > 0
-        ? (monthlyExpenses / monthlyIncome) * 100
+        ? (
+            monthlyExpenses /
+            monthlyIncome
+          ) * 100
         : 0;
 
     if (
@@ -848,7 +1639,9 @@ function generateFallbackCoachReply(
       remainingBudget < 0
     ) {
       return `**Durumun:** Bu ay bütçeni yaklaşık **${formatTL(
-        Math.abs(remainingBudget)
+        Math.abs(
+          remainingBudget
+        )
       )} ₺** aştın.\n\n**Dikkat etmen gereken:** Tüketim harcamaların **${formatTL(
         monthlyExpenses
       )} ₺** seviyesinde.\n\n**Bugün için:** Zorunlu olmayan harcamaları azaltmanı öneririm.`;
@@ -865,7 +1658,9 @@ function generateFallbackCoachReply(
     )} ₺**.`;
   }
 
-  if (safeDaily > 0) {
+  if (
+    safeDaily > 0
+  ) {
     return `**Durumun:** Toplam kullanılabilir paran **${formatTL(
       totalBalance
     )} ₺**, bu ayki tüketim harcaman **${formatTL(
@@ -884,102 +1679,348 @@ function generateFallbackCoachReply(
   )} ₺**.`;
 }
 
-/* =========================================================
-   CEBİ KOÇ API
-   ========================================================= */
+/**
+ * =========================================================
+ * TOOL ACTION VALIDATION
+ * =========================================================
+ *
+ * Gemini'nin döndürdüğü ID'lerin gerçekten CEBİ verisinde
+ * bulunup bulunmadığını backend tarafında da kontrol ediyoruz.
+ */
 
+function validateToolAction(
+  actionName: string,
+  args: any,
+  sourceData: any
+): {
+  valid: boolean;
+  reason?: string;
+} {
+  if (!args) {
+    return {
+      valid: false,
+      reason:
+        "Tool parametreleri bulunamadı.",
+    };
+  }
 
+  if (
+    actionName ===
+    "add_expense"
+  ) {
+    const amount =
+      safeNumber(args.amount);
 
-/* =========================================================
-   CEBİ — DETERMINISTIC TRANSACTION PARSER
-   Gemini'ye ulaşmadan önce açık işlem cümlelerini yakalar.
-   ========================================================= */
-function normalizeTR(value: string): string {
-  return value.toLocaleLowerCase("tr-TR")
-    .replace(/İ/g, "i").replace(/I/g, "i").replace(/ı/g, "i")
-    .replace(/ğ/g, "g").replace(/ü/g, "u").replace(/ş/g, "s")
-    .replace(/ö/g, "o").replace(/ç/g, "c").trim();
-}
-function parseTurkishAmount(text: string): number | null {
-  const m = text.match(/(\d{1,3}(?:[. ]\d{3})*(?:,\d+)?|\d+(?:[.,]\d+)?)(?:\s*)(?:tl|lira|₺)/i)
-    || text.match(/(?:^|\s)(\d{2,7}(?:[.,]\d+)?)(?:\s|$)/i);
-  if (!m) return null;
-  let raw = m[1].replace(/ /g, "");
-  if (raw.includes(".") && raw.includes(",")) raw = raw.replace(/\./g, "").replace(",", ".");
-  else if (raw.includes(",")) raw = raw.replace(",", ".");
-  else if (/^\d{1,3}\.\d{3}$/.test(raw)) raw = raw.replace(".", "");
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : null;
-}
-function detectExpenseCategory(text: string): string {
-  const q = normalizeTR(text);
-  if (/market|migros|carrefour|bim|a101|sok/.test(q)) return "market";
-  if (/restoran|lokanta|kafe|kahve|yemek|pizza|burger/.test(q)) return "yemek";
-  if (/benzin|mazot|akaryakit|petrol/.test(q)) return "akaryakit";
-  if (/fatura|elektrik|su fatur|dogalgaz|internet fatur/.test(q)) return "fatura";
-  if (/kira/.test(q)) return "kira";
-  if (/ulasim|otobus|metro|taksi|uber/.test(q)) return "ulasim";
-  if (/saglik|eczane|doktor|ilac/.test(q)) return "saglik";
-  if (/giyim|elbise|ayakkabi/.test(q)) return "giyim";
-  if (/elektronik|telefon|laptop|bilgisayar/.test(q)) return "elektronik";
-  if (/abonelik|netflix|spotify/.test(q)) return "abonelik";
-  if (/egitim|kurs|okul/.test(q)) return "egitim";
-  if (/eglence|sinema|konser|oyun/.test(q)) return "eglence";
-  if (/alisveris|magaza/.test(q)) return "alisveris";
-  return "diger";
-}
-function isCompletedExpenseStatement(text: string): boolean {
-  const q = normalizeTR(text);
-  return /\b(yaptim|harcadim|harcama yaptim|odeme yaptim|odedim|aldim|satin aldim|alisveris yaptim)\b/.test(q)
-    && !/(yapacagim|harcayacagim|odeyecegim|alacagim|yapabilir miyim|harcayabilir miyim|alabilir miyim)/.test(q);
-}
-function findExplicitExpenseSource(text: string, data: any) {
-  const q = normalizeTR(text);
-  const cards = Array.isArray(data?.creditCards) ? data.creditCards : [];
-  const accounts = Array.isArray(data?.accounts) ? data.accounts : [];
-  for (const c of cards) {
-    const bank = normalizeTR(String(c.bank || c.bankName || ""));
-    const name = normalizeTR(String(c.cardName || c.name || ""));
-    if ((bank && q.includes(bank)) || (name && q.includes(name))) return { id: String(c.id), type: "credit_card", name: `${c.bank || c.bankName} - ${c.cardName || c.name}` };
+    if (
+      amount <= 0
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Harcama tutarı geçersiz.",
+      };
+    }
+
+    const paymentSourceId =
+      String(
+        args.paymentSourceId ||
+          ""
+      ).trim();
+
+    const paymentSourceType =
+      String(
+        args.paymentSourceType ||
+          ""
+      ).trim();
+
+    if (
+      !paymentSourceId ||
+      !paymentSourceType
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Harcama ödeme kaynağı belirtilmeden oluşturulamaz.",
+      };
+    }
+
+    if (
+      paymentSourceType ===
+      "cash"
+    ) {
+      if (
+        paymentSourceId !==
+        "cash"
+      ) {
+        return {
+          valid: false,
+          reason:
+            "Nakit ödeme kaynağı için paymentSourceId 'cash' olmalıdır.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    if (
+      paymentSourceType ===
+      "credit_card"
+    ) {
+      const exists =
+        sourceData.creditCards.some(
+          (card: any) =>
+            String(
+              card.id
+            ) ===
+            paymentSourceId
+        );
+
+      if (!exists) {
+        return {
+          valid: false,
+          reason:
+            "Gönderilen kredi kartı ID'si CEBİ kayıtlarında bulunamadı.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    if (
+      paymentSourceType ===
+      "bank_account"
+    ) {
+      const exists =
+        sourceData.accounts.some(
+          (account: any) =>
+            String(
+              account.id
+            ) ===
+            paymentSourceId
+        );
+
+      if (!exists) {
+        return {
+          valid: false,
+          reason:
+            "Gönderilen banka hesabı ID'si CEBİ kayıtlarında bulunamadı.",
+        };
+      }
+
+      return {
+        valid: true,
+      };
+    }
+
+    return {
+      valid: true,
+    };
   }
-  for (const a of accounts) {
-    const bank = normalizeTR(String(a.bankName || ""));
-    const name = normalizeTR(String(a.accountName || ""));
-    if ((bank && q.includes(bank)) || (name && q.includes(name))) return { id: String(a.id), type: "bank_account", name: `${a.bankName} - ${a.accountName}` };
+
+  if (
+    actionName ===
+    "add_income"
+  ) {
+    const amount =
+      safeNumber(args.amount);
+
+    if (
+      amount <= 0
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Gelir tutarı geçersiz.",
+      };
+    }
+
+    const targetAccountId =
+      String(
+        args.targetAccountId ||
+          ""
+      ).trim();
+
+    if (
+      !targetAccountId
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Gelirin yatırıldığı banka hesabı belirtilmelidir.",
+      };
+    }
+
+    const exists =
+      sourceData.accounts.some(
+        (account: any) =>
+          String(
+            account.id
+          ) === targetAccountId
+      );
+
+    if (!exists) {
+      return {
+        valid: false,
+        reason:
+          "Gelir hesabı ID'si CEBİ kayıtlarında bulunamadı.",
+      };
+    }
+
+    return {
+      valid: true,
+    };
   }
-  if (/nakit|cash/.test(q)) return { id: "cash", type: "cash", name: "Nakit" };
-  if (cards.length === 1 && /kart|kredi/.test(q)) {
-    const c = cards[0]; return { id: String(c.id), type: "credit_card", name: `${c.bank || c.bankName} - ${c.cardName || c.name}` };
+
+  if (
+    actionName ===
+    "make_debt_payment"
+  ) {
+    const amount =
+      safeNumber(args.amount);
+
+    if (
+      amount <= 0
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Borç ödeme tutarı geçersiz.",
+      };
+    }
+
+    const debtId =
+      String(
+        args.debtId ||
+          ""
+      ).trim();
+
+    const bankAccountId =
+      String(
+        args.bankAccountId ||
+          ""
+      ).trim();
+
+    if (
+      !debtId ||
+      !bankAccountId
+    ) {
+      return {
+        valid: false,
+        reason:
+          "Borç ve ödeme hesabı belirtilmelidir.",
+      };
+    }
+
+    const debtType =
+      String(
+        args.debtType ||
+          ""
+      ).trim();
+
+    let debtExists = false;
+
+    if (
+      debtType ===
+      "card"
+    ) {
+      debtExists =
+        sourceData.creditCards.some(
+          (card: any) =>
+            String(
+              card.id
+            ) === debtId
+        );
+    } else if (
+      debtType ===
+      "loan"
+    ) {
+      debtExists =
+        sourceData.loans.some(
+          (loan: any) =>
+            String(
+              loan.id
+            ) === debtId
+        );
+    } else if (
+      debtType ===
+      "kmh"
+    ) {
+      debtExists =
+        sourceData.overdrafts.some(
+          (item: any) =>
+            String(
+              item.id
+            ) === debtId
+        );
+    } else if (
+      debtType ===
+      "other"
+    ) {
+      debtExists =
+        sourceData.otherDebts.some(
+          (item: any) =>
+            String(
+              item.id
+            ) === debtId
+        );
+    }
+
+    if (!debtExists) {
+      return {
+        valid: false,
+        reason:
+          "Gönderilen borç ID'si CEBİ kayıtlarında bulunamadı.",
+      };
+    }
+
+    const accountExists =
+      sourceData.accounts.some(
+        (account: any) =>
+          String(
+            account.id
+          ) ===
+          bankAccountId
+      );
+
+    if (!accountExists) {
+      return {
+        valid: false,
+        reason:
+          "Gönderilen banka hesabı ID'si CEBİ kayıtlarında bulunamadı.",
+      };
+    }
+
+    return {
+      valid: true,
+    };
   }
-  if (accounts.length === 1 && /hesabimdan|bankadan|hesabim/.test(q)) {
-    const a = accounts[0]; return { id: String(a.id), type: "bank_account", name: `${a.bankName} - ${a.accountName}` };
-  }
-  return null;
-}
-function tryBuildExpenseAction(text: string, date: string, data: any) {
-  if (!isCompletedExpenseStatement(text)) return null;
-  const amount = parseTurkishAmount(text);
-  if (!amount) return null;
-  const source = findExplicitExpenseSource(text, data);
-  if (!source) return null;
+
   return {
-    name: "add_expense",
-    args: {
-      amount,
-      category: detectExpenseCategory(text),
-      date,
-      paymentSourceId: source.id,
-      paymentSourceType: source.type,
-      note: text.trim(),
-    },
+    valid: false,
+    reason:
+      "Bilinmeyen işlem.",
   };
 }
 
+/**
+ * =========================================================
+ * CEBİ COACH API
+ * =========================================================
+ */
+
 app.post(
   "/api/coach",
-  async (req: Request, res: Response) => {
+  async (
+    req: Request,
+    res: Response
+  ) => {
     try {
-      const body = req.body || {};
+      const body =
+        req.body || {};
 
       const {
         question,
@@ -987,94 +2028,155 @@ app.post(
         snapshot,
         conversationHistory,
         history,
+
         accounts,
         creditCards,
         loans,
         overdrafts,
         otherDebts,
+
+        incomes,
+        expenses,
+        scheduledPayments,
+
+        profile,
+
         today,
+        currentDate,
       } = body;
 
-      const queryText = String(
-        question || message || ""
-      ).trim();
+      const queryText =
+        String(
+          question ||
+            message ||
+            ""
+        ).trim();
 
       if (!queryText) {
         res.status(400).json({
-          error: "Soru veya mesaj metni belirtilmelidir.",
+          error:
+            "Soru veya mesaj metni belirtilmelidir.",
         });
 
         return;
       }
 
-      const currentDate =
-        String(today || "").trim() || todayTR();
-
-      const ai = getGenAI();
+      const date =
+        String(
+          currentDate ||
+            today ||
+            ""
+        ).trim() ||
+        todayTR();
 
       /**
-       * Uygulama verilerinin kaynakları.
-       *
-       * Hem doğrudan gelen body alanlarını hem de
-       * gelecekte snapshot içine konulabilecek verileri
-       * destekliyoruz.
+       * CEBİ finansal kaynakları.
        */
+
       const sourceData = {
-        accounts: Array.isArray(accounts)
-          ? accounts
-          : [],
-        creditCards: Array.isArray(creditCards)
-          ? creditCards
-          : [],
-        loans: Array.isArray(loans)
-          ? loans
-          : [],
-        overdrafts: Array.isArray(overdrafts)
-          ? overdrafts
-          : [],
-        otherDebts: Array.isArray(otherDebts)
-          ? otherDebts
-          : [],
+        accounts:
+          Array.isArray(accounts)
+            ? accounts
+            : [],
+
+        creditCards:
+          Array.isArray(
+            creditCards
+          )
+            ? creditCards
+            : [],
+
+        loans:
+          Array.isArray(loans)
+            ? loans
+            : [],
+
+        overdrafts:
+          Array.isArray(
+            overdrafts
+          )
+            ? overdrafts
+            : [],
+
+        otherDebts:
+          Array.isArray(
+            otherDebts
+          )
+            ? otherDebts
+            : [],
       };
 
-      // Açık ve tamamlanmış harcamaları Gemini'den bağımsız yakala.
-      // Böylece model function calling yapmasa bile işlem kaydı çalışır.
-      const directExpenseAction = tryBuildExpenseAction(
-        queryText,
-        currentDate,
-        sourceData
-      );
-
-      if (directExpenseAction) {
-        const amount = safeNumber(directExpenseAction.args.amount);
-        const actionAnswer =
-          `Tamam. ${formatTL(amount)} ₺ tutarındaki harcamayı CEBİ'ye ekliyorum.`;
-
-        res.json({
-          answer: actionAnswer,
-          reply: actionAnswer,
-          isRuleBased: true,
-          action: directExpenseAction,
-        });
-        return;
-      }
-
       const formattedSnapshot =
-        formatSnapshot(snapshot || {});
+        formatSnapshot(
+          snapshot || {}
+        );
 
       const formattedSources =
-        formatFinancialSources(sourceData);
-
-      const formattedHistory =
-        formatConversationHistory(
-          conversationHistory,
-          history
+        formatFinancialSources(
+          sourceData
         );
 
       /**
-       * Gemini yoksa güvenli fallback.
+       * Eski frontend sürümlerini de destekle.
        */
+
+      const rawHistory =
+        Array.isArray(
+          conversationHistory
+        )
+          ? conversationHistory
+          : Array.isArray(history)
+          ? history
+          : [];
+
+      /**
+       * =====================================================
+       * GEMINI YOKSA FALLBACK
+       * =====================================================
+       */
+
+      const ai =
+        getGenAI();
+
       if (!ai) {
+        /**
+         * Gemini yoksa açık ve tamamlanmış
+         * harcamayı yine de yakalamaya çalış.
+         */
+
+        const directFallbackAction =
+          tryBuildExpenseAction(
+            queryText,
+            date,
+            sourceData
+          );
+
+        if (
+          directFallbackAction
+        ) {
+          const actionAnswer =
+            `Tamam. ${formatTL(
+              directFallbackAction.args
+                .amount
+            )} ₺ tutarındaki harcamayı CEBİ'ye ekliyorum.`;
+
+          res.json({
+            answer:
+              actionAnswer,
+
+            reply:
+              actionAnswer,
+
+            isRuleBased:
+              true,
+
+            action:
+              directFallbackAction,
+          });
+
+          return;
+        }
+
         const fallbackReply =
           generateFallbackCoachReply(
             queryText,
@@ -1082,217 +2184,542 @@ app.post(
           );
 
         res.json({
-          answer: fallbackReply,
-          reply: fallbackReply,
-          isRuleBased: true,
-          action: null,
+          answer:
+            fallbackReply,
+
+          reply:
+            fallbackReply,
+
+          isRuleBased:
+            true,
+
+          action:
+            null,
         });
 
         return;
       }
 
-      /* =====================================================
-         SYSTEM INSTRUCTION
-         ===================================================== */
+      /**
+       * =====================================================
+       * SYSTEM INSTRUCTION
+       * =====================================================
+       */
 
       const systemInstruction = `
 Sen CEBİ adlı kişisel finans uygulamasının yapay zekâ Finans Koçusun.
 
-Sen sadece konuşan bir chatbot değilsin.
-Gerektiğinde CEBİ içindeki gerçek finansal işlemlerin oluşturulmasına yardımcı olan bir asistansın.
+Sen sıradan bir komut botu değilsin.
+Kullanıcı seninle doğal Türkçe konuşur.
+Sen konuşmanın anlamını, önceki mesajları ve kullanıcının finansal verilerini birlikte değerlendirirsin.
+
+AMAÇ:
+
+Kullanıcının ne demek istediğini önce ANLA.
+Sonra gerekiyorsa CEBİ finansal işlemlerinden birini gerçekleştir.
+Eksik bilgi varsa yalnızca eksik bilgiyi sor.
+Kullanıcı sadece soru soruyorsa hiçbir işlem oluşturma.
 
 BUGÜN:
-${currentDate}
+${date}
 
-TEMEL KURALLAR:
+==================================================
+KONUŞMA DAVRANIŞI
+==================================================
 
 1. Her zaman Türkçe konuş.
 
-2. Samimi, net, sakin ve güvenilir ol.
-   Gereksiz uzun cevaplar verme.
+2. Kullanıcıyla doğal, samimi, kısa ve anlaşılır konuş.
 
-3. Kullanıcının CEBİ'ye girdiği verileri esas al.
-   Bankaların canlı sistemlerine erişimin yok.
+3. Kullanıcının mesajını tek başına değerlendirme.
+   Önceki konuşmayı da dikkate al.
 
-4. Banka bakiyesi ile borcu birbirine karıştırma.
+4. Kullanıcı bir önceki mesajında söylediği işlemi
+   sonraki kısa mesajıyla tamamlayabilir.
 
-5. TÜKETİM HARCAMASI ile BORÇ ÖDEMESİNİ kesinlikle ayır.
+ÖRNEK:
 
-6. Kullanıcı GERÇEKTEN bir harcama yaptığını söylüyorsa
-   ve gerekli bilgiler mevcutsa "add_expense" aracını kullan.
+Kullanıcı:
+"Bugün markette 500 TL harcadım."
 
-7. Kullanıcı GERÇEKTEN gelir aldığını veya hesabına gelir yattığını
-   söylüyorsa ve gerekli bilgiler mevcutsa "add_income" aracını kullan.
+CEBİ:
+"Hangi kart veya hesaptan ödedin?"
 
-8. Kullanıcı GERÇEKTEN bir borç ödemesi yaptığını söylüyorsa
-   "make_debt_payment" aracını kullan.
+Kullanıcı:
+"Garanti Bonus."
 
-9. Gelecekte yapılması planlanan harcamaları gerçekleşmiş harcama olarak kaydetme.
+Bu ikinci mesaj tek başına anlamsız görünse bile,
+önceki konuşma nedeniyle bunun ödeme kaynağı cevabı olduğunu anlayabilirsin.
 
-10. Kullanıcı yalnızca:
-    "Markette 850 TL harcadım."
-    diyorsa ve ödeme kaynağı belirtilmiyorsa,
-    ödeme kaynağını sormadan kayıt oluşturma.
+5. Kullanıcının geçmişte söylediği bilgiler ile
+   mevcut mesajını birleştir.
 
-11. Kullanıcı:
-    "Markette 850 TL harcadım Garanti kredi kartımdan."
-    diyorsa uygun Garanti kredi kartını bul ve add_expense kullan.
+6. Kullanıcı "evet", "hayır", "Garanti", "nakit",
+   "Bonus", "hesabımdan", "ondan", "evet o",
+   gibi kısa cevaplar verirse önceki mesaj bağlamını değerlendir.
 
-12. Kullanıcı "Garanti kartımdan" gibi bir ifade kullanırsa
-    mevcut KREDİ KARTLARI listesindeki en uygun kartı seç.
+7. Ancak bağlam yeterli değilse tahmin yapma.
+   Kullanıcıya kısa bir netleştirme sorusu sor.
 
-13. Birden fazla aynı isimde veya benzer ödeme kaynağı varsa
-    tahmin etmek yerine kullanıcıya sor.
+==================================================
+FİNANSAL İŞLEM KURALLARI
+==================================================
 
-14. Kullanıcı tarih belirtmezse BUGÜNÜ kullan:
-    ${currentDate}
+8. GERÇEKTEN yapılmış bir tüketim harcaması varsa
+   ve gerekli bilgiler mevcutsa add_expense kullan.
 
-15. Türkçe doğal dil ifadelerini doğru yorumla:
-    - market
-    - market alışverişi
-    - migros
-    - carrefour
-    - bim
-    - a101
-    - şok
-    gibi ifadeler genellikle "market" kategorisidir.
+9. GERÇEKTEN alınmış/yatmış bir gelir varsa
+   ve gerekli bilgiler mevcutsa add_income kullan.
 
-16. "yemek yedim", "restoranda", "lokantada", "kafede"
-    gibi ifadeler genellikle "yemek" kategorisidir.
+10. GERÇEKTEN yapılmış bir borç ödemesi varsa
+    make_debt_payment kullan.
 
-17. "benzin", "mazot", "akaryakıt"
-    gibi ifadeler "akaryakit" kategorisidir.
+11. Gelecekte yapılacak işlemleri gerçekleşmiş işlem olarak kaydetme.
 
-18. "fatura ödedim" tüketim faturası ise fatura kategorisidir.
-    Ancak kredi kartı borcu, kredi taksiti veya KMH borcu ödeme işlemi
-    borç ödemesidir ve tüketim harcaması değildir.
+12. "harcayacağım", "alacağım", "ödeyeceğim",
+    "yapacağım", "alabilir miyim",
+    "harcayabilir miyim" gibi ifadeler
+    otomatik olarak gerçekleşmiş işlem değildir.
 
-19. Kullanıcı tutarı Türkçe kelimelerle söylese bile anlayabil:
-    "sekiz yüz elli lira" = 850
-    "iki bin beş yüz" = 2500
-    "bin iki yüz elli" = 1250
+13. "harcadım", "aldım", "ödedim",
+    "ödeme yaptım", "alışveriş yaptım",
+    "yemek yedim" gibi ifadeler gerçekleşmiş
+    işlem anlamına gelebilir.
 
-20. Kullanıcı "850", "850 TL", "850 lira", "850₺"
-    gibi ifadeleri aynı tutar olarak kabul et.
+==================================================
+HARCAMA VE BORÇ ÖDEMESİ AYRIMI
+==================================================
 
-21. İşlem oluşturduğunda kullanıcıya kısa ve açık cevap ver.
+14. Tüketim harcaması ile borç ödemesini kesinlikle ayır.
 
-22. Bir işlem için gerekli bilgi eksikse işlem aracını çağırma.
-    Kullanıcıya sadece eksik bilgiyi sor.
+Örnek tüketim:
+- Marketten 500 TL alışveriş yaptım.
+- Restoranda 800 TL yemek yedim.
+- Benzine 1500 TL verdim.
 
-23. Finansal tavsiye verirken gerçek snapshot verilerine dayan.
+Örnek borç ödemesi:
+- Kredi kartı borcuma 5000 TL ödedim.
+- Kredimin taksidini 10000 TL ödedim.
+- KMH borcuma 2000 TL yatırdım.
 
-24. Günlük güvenli harcama ile planlanan günlük bütçeyi karıştırma.
+Borç ödemesini add_expense ile kaydetme.
 
-25. Nakit açığı varsa günlük güvenli harcamayı 0 ₺ kabul et.
+==================================================
+ÖDEME KAYNAĞI
+==================================================
 
-26. Yatırım getirisi konusunda kesin kazanç vaadi verme.
+15. Harcama kaydı için ödeme kaynağı gereklidir.
 
-ÖNEMLİ:
-Bir tool çağrısı yaptığında, tool parametrelerindeki ID'ler
-mutlaka aşağıda verilen CEBİ kayıtlarından seçilmelidir.
-Uydurma ID üretme.
+16. Kullanıcı:
+"Markette 850 TL harcadım."
+
+diyorsa ödeme kaynağı bilinmiyorsa tool çağırma.
+
+Şunu sor:
+"Hangi kart veya hesaptan ödedin?"
+
+17. Kullanıcı:
+"Markette 850 TL Garanti Bonus kartımla harcama yaptım."
+
+diyorsa mevcut kredi kartları arasından uygun gerçek ID'yi seç.
+
+18. Kullanıcı:
+"Garanti kartımdan."
+
+diyorsa önceki konuşmayı dikkate al.
+
+19. Birden fazla uygun kart/hesap varsa tahmin yapma.
+
+20. Yalnızca gönderilen finansal verilerde bulunan gerçek ID'leri kullan.
+
+21. ASLA ID uydurma.
+
+22. Nakit açıkça belirtilmişse:
+
+paymentSourceId = "cash"
+paymentSourceType = "cash"
+
+kullan.
+
+==================================================
+GELİR
+==================================================
+
+23. Kullanıcı:
+"Maaşım yattı 45000 TL."
+
+diyorsa bunun gerçek gelir olduğunu değerlendir.
+
+24. Gelirin hangi hesaba yattığı bilinmiyorsa
+   targetAccountId uydurma.
+
+25. Birden fazla banka hesabı varsa kullanıcıdan
+   hangi hesaba yattığını sor.
+
+==================================================
+BORÇ ÖDEMESİ
+==================================================
+
+26. Kredi kartı borcu → debtType "card"
+
+27. Kredi / taksit → debtType "loan"
+
+28. KMH / ek hesap → debtType "kmh"
+
+29. Diğer borç → debtType "other"
+
+30. Borç ID'sini yalnızca gerçek finansal listeden seç.
+
+31. Ödeme hesabı ID'sini yalnızca gerçek banka hesaplarından seç.
+
+==================================================
+TARİH
+==================================================
+
+32. Kullanıcı tarih belirtmezse:
+${date}
+
+33. "bugün" = ${date}
+
+34. "dün" gibi göreli tarih ifadelerini bugünün tarihine göre hesapla.
+
+35. Tool tarihi YYYY-MM-DD formatında vermelidir.
+
+==================================================
+KATEGORİLER
+==================================================
+
+36. Market, Migros, Carrefour, BİM, A101, Şok:
+market
+
+37. Restoran, lokanta, kafe, kahve, pizza, burger:
+yemek
+
+38. Benzin, mazot, akaryakıt:
+akaryakit
+
+39. Fatura, elektrik, su, doğalgaz, internet:
+fatura
+
+40. Kira:
+kira
+
+41. Ulaşım, otobüs, metro, taksi, dolmuş:
+ulasim
+
+42. Eczane, doktor, ilaç, hastane:
+saglik
+
+43. Giyim, elbise, ayakkabı:
+giyim
+
+44. Telefon, laptop, bilgisayar, elektronik:
+elektronik
+
+45. Netflix, Spotify, abonelik:
+abonelik
+
+46. Kurs, okul, eğitim:
+egitim
+
+47. Sinema, konser, oyun:
+eglence
+
+48. Mağaza veya genel alışveriş:
+alisveris
+
+49. Ev eşyası veya ev harcaması:
+ev
+
+50. Sigorta:
+sigorta
+
+51. Vergi:
+vergi
+
+==================================================
+TUTARLAR
+==================================================
+
+52. Türkçe sayı ifadelerini anlayabil.
+
+Örnek:
+"850 TL" = 850
+"850 lira" = 850
+"850₺" = 850
+"1.500 TL" = 1500
+"2.500,50 TL" = 2500.50
+"sekiz yüz elli lira" = 850
+"iki bin beş yüz" = 2500
+"bin iki yüz elli" = 1250
+
+==================================================
+SORU MU İŞLEM Mİ?
+==================================================
+
+53. Kullanıcı:
+"500 TL harcasam olur mu?"
+
+Bu işlem değildir.
+Finansal durumunu analiz ederek cevap ver.
+
+54. Kullanıcı:
+"Bugün 500 TL harcadım."
+
+Bu gerçekleşmiş işlem olabilir.
+Gerekli bilgiler varsa add_expense kullan.
+
+55. Kullanıcı:
+"Market alışverişi yaptım ama kaç tuttuğunu hatırlamıyorum."
+
+Tutar yoksa tool çağırma.
+Tutarı sor.
+
+56. Kullanıcı:
+"Garanti kartımla markette 500 TL harcadım."
+
+Gerekli bilgiler mevcutsa doğrudan add_expense kullan.
+
+==================================================
+FİNANSAL ANALİZ
+==================================================
+
+57. Finansal tavsiyeleri CEBİ snapshot verilerine dayandır.
+
+58. Banka bakiyesi ile toplam borcu karıştırma.
+
+59. Günlük güvenli harcama ile planlanan günlük bütçeyi karıştırma.
+
+60. Nakit açığı varsa günlük güvenli harcamayı 0 ₺ kabul et.
+
+61. Yatırım konusunda kesin kazanç garantisi verme.
+
+62. CEBİ'nin banka sistemlerine canlı erişimi yoktur.
+   Yalnızca gönderilen CEBİ verilerini kullan.
+
+==================================================
+CEBİ GERÇEK VERİLERİ
+==================================================
+
+Aşağıdaki banka, kart ve borç ID'leri GERÇEKTİR.
+
+Tool çağırırken yalnızca bu listelerde bulunan ID'leri kullan.
 
 ${formattedSources}
 
+==================================================
+KULLANICI SNAPSHOT
+==================================================
+
 ${formattedSnapshot}
 
-ÖNCEKİ KONUŞMA:
-${formattedHistory}
+==================================================
+DİĞER KULLANICI VERİLERİ
+==================================================
+
+PROFİL:
+${JSON.stringify(
+  profile || {},
+  null,
+  2
+)}
+
+GELİRLER:
+${JSON.stringify(
+  Array.isArray(incomes)
+    ? incomes.slice(0, 50)
+    : [],
+  null,
+  2
+)}
+
+SON HARCAMALAR:
+${JSON.stringify(
+  Array.isArray(expenses)
+    ? expenses.slice(0, 50)
+    : [],
+  null,
+  2
+)}
+
+YAKLAŞAN / PLANLANAN ÖDEMELER:
+${JSON.stringify(
+  Array.isArray(
+    scheduledPayments
+  )
+    ? scheduledPayments.slice(
+        0,
+        50
+      )
+    : [],
+  null,
+  2
+)}
+
+==================================================
+ÖNCEKİ KONUŞMA
+==================================================
+
+Önceki mesajlar konuşmanın bağlamıdır.
+Son kullanıcı mesajını bu bağlamla birlikte değerlendir.
+
+==================================================
+SON KURAL
+==================================================
+
+Önce ANLA.
+Sonra GEREKİYORSA İŞLEM YAP.
+Eksik bilgi varsa SOR.
+Gereksiz işlem oluşturma.
+ID UYDURMA.
+Kullanıcının söylemediği finansal bilgileri uydurma.
 `;
-
-      /* =====================================================
-         USER PROMPT
-         ===================================================== */
-
-      const prompt = `
-Kullanıcının son mesajı:
-
-"${queryText}"
-
-Bu mesajı dikkatlice analiz et.
-
-Eğer kullanıcı gerçek bir finansal işlem yaptıysa ve gerekli
-bilgiler mevcutsa uygun CEBİ aracını çağır.
-
-Eğer gerekli bilgi eksikse araç çağırma ve eksik bilgiyi sor.
-
-Eğer kullanıcı yalnızca soru soruyorsa araç çağırma;
-finansal verileri analiz ederek cevap ver.
-
-Cevabın doğal Türkçe olsun.
-`;
-
-      /* =====================================================
-         GEMINI
-         ===================================================== */
-
-      const response =
-        await ai.models.generateContent({
-          model: "gemini-3.8-flash",
-
-          contents: prompt,
-
-          config: {
-            systemInstruction,
-
-            tools: [
-              {
-                functionDeclarations:
-                  cebiTools,
-              },
-            ],
-          },
-        });
 
       /**
-       * Gemini'nin function calling sonucu.
+       * =====================================================
+       * GEMINI CONTENTS
+       * =====================================================
        */
+
+      const contents =
+        buildGeminiContents(
+          rawHistory,
+          queryText
+        );
+
+      /**
+       * =====================================================
+       * GEMINI
+       * =====================================================
+       */
+
+      const response =
+        await ai.models.generateContent(
+          {
+            model:
+              "gemini-3.8-flash",
+
+            contents,
+
+            config: {
+              systemInstruction,
+
+              tools: [
+                {
+                  functionDeclarations:
+                    cebiTools,
+                },
+              ],
+            },
+          }
+        );
+
+      /**
+       * =====================================================
+       * FUNCTION CALL
+       * =====================================================
+       */
+
       const functionCalls =
-        response.functionCalls || [];
+        response.functionCalls ||
+        [];
 
-      if (functionCalls.length > 0) {
-        const firstCall = functionCalls[0];
-
+      if (
+        functionCalls.length > 0
+      ) {
         /**
-         * CEBİ frontend'ine doğrudan şu yapıyı gönderiyoruz:
-         *
-         * {
-         *   action: {
-         *      name: "add_expense",
-         *      args: {...}
-         *   }
-         * }
-         *
-         * React tarafı bu action'ı gerçek finans fonksiyonuna
+         * Şimdilik ilk tool çağrısını kullanıyoruz.
+         * CEBİ frontend'i action'ı gerçek fonksiyona
          * bağlayacak.
          */
+
+        const firstCall =
+          functionCalls[0];
+
+        const actionName =
+          String(
+            firstCall.name ||
+              ""
+          );
+
+        const actionArgs =
+          firstCall.args ||
+          {};
+
+        /**
+         * Backend tarafında ikinci güvenlik kontrolü.
+         */
+
+        const validation =
+          validateToolAction(
+            actionName,
+            actionArgs,
+            sourceData
+          );
+
+        if (
+          !validation.valid
+        ) {
+          /**
+           * Tool çağrısı güvenli değilse
+           * işlemi gerçekleştirmek yerine kullanıcıdan
+           * eksik/geçersiz bilgiyi istemesi için
+           * kısa cevap dön.
+           */
+
+          const clarification =
+            validation.reason ||
+            "İşlemi güvenli şekilde oluşturabilmem için bir bilgiyi netleştirmem gerekiyor.";
+
+          res.json({
+            answer:
+              clarification,
+
+            reply:
+              clarification,
+
+            isRuleBased:
+              true,
+
+            action:
+              null,
+          });
+
+          return;
+        }
+
         const action = {
-          name: firstCall.name,
-          args: firstCall.args || {},
+          name:
+            actionName,
+
+          args:
+            actionArgs,
         };
 
-        let actionAnswer = "";
+        let actionAnswer =
+          "İşlemi CEBİ'ye aktarıyorum.";
 
-        switch (firstCall.name) {
+        switch (
+          actionName
+        ) {
           case "add_expense":
             actionAnswer =
               `Tamam. ${formatTL(
-                firstCall.args?.amount
+                actionArgs.amount
               )} ₺ tutarındaki harcamayı CEBİ'ye ekliyorum.`;
             break;
 
           case "add_income":
             actionAnswer =
               `Tamam. ${formatTL(
-                firstCall.args?.amount
+                actionArgs.amount
               )} ₺ tutarındaki geliri CEBİ'ye ekliyorum.`;
             break;
 
           case "make_debt_payment":
             actionAnswer =
               `Tamam. ${formatTL(
-                firstCall.args?.amount
+                actionArgs.amount
               )} ₺ tutarındaki borç ödemesini CEBİ'ye işliyorum.`;
             break;
 
@@ -1302,9 +2729,15 @@ Cevabın doğal Türkçe olsun.
         }
 
         res.json({
-          answer: actionAnswer,
-          reply: actionAnswer,
-          isRuleBased: false,
+          answer:
+            actionAnswer,
+
+          reply:
+            actionAnswer,
+
+          isRuleBased:
+            false,
+
           action,
         });
 
@@ -1312,31 +2745,124 @@ Cevabın doğal Türkçe olsun.
       }
 
       /**
-       * Normal sohbet cevabı.
+       * =====================================================
+       * NORMAL CHAT RESPONSE
+       * =====================================================
        */
+
       const answer =
         response.text ||
-        "Şu anda finansal verilerinizi analiz ederken bir sorun oluştu. Lütfen tekrar deneyin.";
+        "Şu anda finansal verilerini analiz ederken bir sorun oluştu. Lütfen tekrar deneyin.";
 
       res.json({
         answer,
-        reply: answer,
-        isRuleBased: false,
-        action: null,
+        reply:
+          answer,
+        isRuleBased:
+          false,
+        action:
+          null,
       });
-    } catch (error: any) {
+    } catch (
+      error: any
+    ) {
       console.error(
         "CEBİ Coach API error:",
         error
       );
 
-      const body = req.body || {};
+      const body =
+        req.body || {};
 
-      const query = String(
-        body.question ||
-          body.message ||
-          ""
-      ).trim();
+      const query =
+        String(
+          body.question ||
+            body.message ||
+            ""
+        ).trim();
+
+      /**
+       * Gemini hata verirse son çare olarak
+       * açık bir harcamayı yerel parser ile yakalamayı dene.
+       */
+
+      const sourceData = {
+        accounts:
+          Array.isArray(
+            body.accounts
+          )
+            ? body.accounts
+            : [],
+
+        creditCards:
+          Array.isArray(
+            body.creditCards
+          )
+            ? body.creditCards
+            : [],
+
+        loans:
+          Array.isArray(
+            body.loans
+          )
+            ? body.loans
+            : [],
+
+        overdrafts:
+          Array.isArray(
+            body.overdrafts
+          )
+            ? body.overdrafts
+            : [],
+
+        otherDebts:
+          Array.isArray(
+            body.otherDebts
+          )
+            ? body.otherDebts
+            : [],
+      };
+
+      const fallbackAction =
+        tryBuildExpenseAction(
+          query,
+          String(
+            body.currentDate ||
+              body.today ||
+              ""
+          ).trim() ||
+            todayTR(),
+          sourceData
+        );
+
+      if (
+        fallbackAction
+      ) {
+        const actionAnswer =
+          `Tamam. ${formatTL(
+            fallbackAction.args
+              .amount
+          )} ₺ tutarındaki harcamayı CEBİ'ye ekliyorum.`;
+
+        res.status(200).json({
+          answer:
+            actionAnswer,
+
+          reply:
+            actionAnswer,
+
+          isRuleBased:
+            true,
+
+          action:
+            fallbackAction,
+
+          errorNotice:
+            "Yapay zeka servisine geçici olarak ulaşılamadığı için açık işlem CEBİ yerel işlem motoru ile algılandı.",
+        });
+
+        return;
+      }
 
       const fallbackReply =
         generateFallbackCoachReply(
@@ -1345,10 +2871,18 @@ Cevabın doğal Türkçe olsun.
         );
 
       res.status(200).json({
-        answer: fallbackReply,
-        reply: fallbackReply,
-        isRuleBased: true,
-        action: null,
+        answer:
+          fallbackReply,
+
+        reply:
+          fallbackReply,
+
+        isRuleBased:
+          true,
+
+        action:
+          null,
+
         errorNotice:
           "Yapay zeka servisine geçici olarak ulaşılamadığı için CEBİ kural tabanlı finans motoru ile yanıtlandı.",
       });
@@ -1356,37 +2890,54 @@ Cevabın doğal Türkçe olsun.
   }
 );
 
-/* =========================================================
-   VITE / PRODUCTION SERVER
-   ========================================================= */
+/**
+ * =========================================================
+ * VITE / PRODUCTION SERVER
+ * =========================================================
+ */
 
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-      },
+  if (
+    process.env.NODE_ENV !==
+    "production"
+  ) {
+    const vite =
+      await createViteServer({
+        server: {
+          middlewareMode:
+            true,
+        },
 
-      appType: "spa",
-    });
+        appType: "spa",
+      });
 
-    app.use(vite.middlewares);
+    app.use(
+      vite.middlewares
+    );
   } else {
-    const distPath = path.join(
-      process.cwd(),
-      "dist"
+    const distPath =
+      path.join(
+        process.cwd(),
+        "dist"
+      );
+
+    app.use(
+      express.static(
+        distPath
+      )
     );
 
-    app.use(express.static(distPath));
-
-    app.get("*", (_req, res) => {
-      res.sendFile(
-        path.join(
-          distPath,
-          "index.html"
-        )
-      );
-    });
+    app.get(
+      "*",
+      (_req, res) => {
+        res.sendFile(
+          path.join(
+            distPath,
+            "index.html"
+          )
+        );
+      }
+    );
   }
 
   app.listen(
