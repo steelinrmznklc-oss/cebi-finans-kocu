@@ -9,7 +9,7 @@ dotenv.config();
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
-app.use(express.json({ limit: "2mb" }));
+app.use(express.json({ limit: "12mb" }));
 
 /**
  * =========================================================
@@ -80,6 +80,352 @@ app.get("/api/health", (_req: Request, res: Response) => {
     timestamp: new Date().toISOString(),
   });
 });
+
+
+/**
+ * =========================================================
+ * CEBİ — RECEIPT ANALYSIS
+ * =========================================================
+ * Fiş fotoğrafını Gemini Vision'a gönderir ve yalnızca
+ * harcama TASLAĞI döndürür. Bu endpoint hiçbir finansal
+ * kaydı doğrudan oluşturmaz.
+ *
+ * Akış:
+ * Fotoğraf -> Gemini -> JSON taslak -> Frontend önizleme
+ * -> Kullanıcı onayı -> mevcut CEBİ add_expense akışı
+ * =========================================================
+ */
+
+const RECEIPT_CATEGORIES = [
+  "market",
+  "yemek",
+  "ulasim",
+  "fatura",
+  "kira",
+  "alisveris",
+  "saglik",
+  "eglence",
+  "abonelik",
+  "egitim",
+  "akaryakit",
+  "ev",
+  "giyim",
+  "elektronik",
+  "sigorta",
+  "vergi",
+  "diger",
+] as const;
+
+function cleanReceiptJson(text: string): string {
+  return text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/^```\s*/i, "")
+    .replace(/\s*```$/i, "")
+    .trim();
+}
+
+function normalizeReceiptCategory(value: unknown): string {
+  const category = String(value || "").trim();
+
+  return RECEIPT_CATEGORIES.includes(
+    category as (typeof RECEIPT_CATEGORIES)[number]
+  )
+    ? category
+    : "diger";
+}
+
+function normalizeReceiptResult(raw: any) {
+  const total = Number(raw?.total);
+
+  const items = Array.isArray(raw?.items)
+    ? raw.items
+        .map((item: any) => ({
+          name: String(item?.name || "").trim(),
+          quantity: Number(item?.quantity || 1),
+          total: Number(item?.total || 0),
+        }))
+        .filter(
+          (item: any) =>
+            item.name &&
+            Number.isFinite(item.quantity) &&
+            Number.isFinite(item.total)
+        )
+    : [];
+
+  const paymentType = [
+    "credit_card",
+    "bank_account",
+    "cash",
+    "unknown",
+  ].includes(String(raw?.payment?.type || ""))
+    ? String(raw.payment.type)
+    : "unknown";
+
+  const paymentConfidence = [
+    "high",
+    "medium",
+    "low",
+  ].includes(String(raw?.payment?.confidence || ""))
+    ? String(raw.payment.confidence)
+    : "low";
+
+  const categoryConfidence = [
+    "high",
+    "medium",
+    "low",
+  ].includes(String(raw?.categoryConfidence || ""))
+    ? String(raw.categoryConfidence)
+    : "low";
+
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(
+    String(raw?.date || "")
+  )
+    ? String(raw.date)
+    : null;
+
+  const time = /^\d{1,2}:\d{2}$/.test(
+    String(raw?.time || "")
+  )
+    ? String(raw.time)
+    : null;
+
+  const last4 = raw?.payment?.last4
+    ? String(raw.payment.last4)
+        .replace(/\D/g, "")
+        .slice(-4)
+    : null;
+
+  return {
+    merchant: raw?.merchant
+      ? String(raw.merchant).trim()
+      : null,
+    date,
+    time,
+    total:
+      Number.isFinite(total) && total > 0
+        ? total
+        : null,
+    currency: "TRY",
+    category: normalizeReceiptCategory(
+      raw?.category
+    ),
+    categoryConfidence,
+    payment: {
+      bank: raw?.payment?.bank
+        ? String(raw.payment.bank).trim()
+        : null,
+      type: paymentType,
+      last4,
+      confidence: paymentConfidence,
+    },
+    items,
+    notes: raw?.notes
+      ? String(raw.notes).trim()
+      : null,
+    needsUserConfirmation: true,
+  };
+}
+
+app.post(
+  "/api/receipt/analyze",
+  async (req: Request, res: Response) => {
+    try {
+      const body = req.body || {};
+      const image = String(body.image || "").trim();
+      const mimeType = String(
+        body.mimeType || ""
+      ).trim();
+
+      if (!image) {
+        res.status(400).json({
+          error: "Fiş fotoğrafı gönderilmedi.",
+        });
+        return;
+      }
+
+      if (
+        !/^image\/(jpeg|jpg|png|webp)$/i.test(
+          mimeType
+        )
+      ) {
+        res.status(400).json({
+          error:
+            "Desteklenen fotoğraf türleri: JPG, PNG veya WEBP.",
+        });
+        return;
+      }
+
+      const ai = getGenAI();
+
+      if (!ai) {
+        res.status(503).json({
+          error:
+            "GEMINI_API_KEY bulunamadı. Fiş analizi için Gemini API anahtarı gereklidir.",
+        });
+        return;
+      }
+
+      /**
+       * Frontend data URL gönderebilir:
+       * data:image/jpeg;base64,AAAA...
+       * veya doğrudan base64 gönderebilir.
+       */
+      const base64Data = image.includes(",")
+        ? image.split(",").pop() || ""
+        : image;
+
+      if (!base64Data) {
+        res.status(400).json({
+          error: "Fotoğraf verisi boş.",
+        });
+        return;
+      }
+
+      const prompt = `
+Sen CEBİ adlı kişisel finans uygulamasının fiş okuma motorusun.
+Görevin fotoğraftaki fişi analiz etmek ve SADECE aşağıdaki JSON nesnesini döndürmektir.
+
+ÇOK ÖNEMLİ KURALLAR:
+1. Fotoğrafta açıkça görülmeyen bilgileri uydurma.
+2. Toplam tutarı fişin nihai toplam alanından belirle. Özellikle "Ödenecek KDV Dahil Tutar", "TOPLAM", "GENEL TOPLAM" gibi alanları kontrol et.
+3. Türkçe para biçimini doğru yorumla. "149,00" = 149.00 TL, "1.245,90" = 1245.90 TL.
+4. Tarihi YYYY-MM-DD formatında döndür.
+5. Saat okunuyorsa HH:MM formatında döndür.
+6. Ödeme yöntemi kesin değilse type = "unknown" kullan.
+7. Banka adı okunuyorsa yaz. Kartın son 4 hanesi okunuyorsa yaz.
+8. Fişte görülen banka veya kart bilgisi CEBİ'deki gerçek hesap/kart ID'si değildir. ASLA bir CEBİ ID'si üretme veya tahmin etme.
+9. Kullanıcı hesabını/kartını bu endpoint'te seçme. Bu seçim frontend önizlemesinde kullanıcı tarafından yapılacaktır.
+10. Kategori SADECE şu değerlerden biri olabilir:
+market, yemek, ulasim, fatura, kira, alisveris, saglik, eglence, abonelik, egitim, akaryakit, ev, giyim, elektronik, sigorta, vergi, diger
+11. Market, Migros, Carrefour, BİM, A101, Şok gibi market alışverişleri "market" olabilir.
+12. Telefon, bilgisayar, kulaklık, elektronik cihaz ve aksesuarlar "elektronik" olmalıdır.
+13. Giyim ve ayakkabı "giyim" olmalıdır.
+14. Ürün satırlarını yalnızca gerçekten okunabiliyorsa ekle.
+15. Toplam tutardan emin değilsen en olası değeri ver ve notes alanında belirsizliği açıkça belirt.
+16. JSON dışında hiçbir açıklama yazma.
+17. needsUserConfirmation HER ZAMAN true olmalıdır.
+
+JSON ŞEMASI:
+{
+  "merchant": "string|null",
+  "date": "YYYY-MM-DD|null",
+  "time": "HH:MM|null",
+  "total": 0,
+  "currency": "TRY",
+  "category": "market|yemek|ulasim|fatura|kira|alisveris|saglik|eglence|abonelik|egitim|akaryakit|ev|giyim|elektronik|sigorta|vergi|diger",
+  "categoryConfidence": "high|medium|low",
+  "payment": {
+    "bank": "string|null",
+    "type": "credit_card|bank_account|cash|unknown",
+    "last4": "string|null",
+    "confidence": "high|medium|low"
+  },
+  "items": [
+    {
+      "name": "string",
+      "quantity": 1,
+      "total": 0
+    }
+  ],
+  "notes": "string|null",
+  "needsUserConfirmation": true
+}
+
+Fotoğraftaki fişi analiz et.
+`;
+
+      const response =
+        await ai.models.generateContent({
+          model: "gemini-3.8-flash",
+
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Data,
+                  },
+                },
+              ],
+            },
+          ],
+
+          config: {
+            temperature: 0.1,
+            responseMimeType: "application/json",
+          },
+        });
+
+      const responseText = String(
+        response.text || ""
+      ).trim();
+
+      if (!responseText) {
+        res.status(502).json({
+          error:
+            "Gemini fiş analizi için boş yanıt döndürdü.",
+        });
+        return;
+      }
+
+      let parsed: any;
+
+      try {
+        parsed = JSON.parse(
+          cleanReceiptJson(responseText)
+        );
+      } catch (parseError) {
+        console.error(
+          "CEBİ Receipt JSON parse error:",
+          parseError
+        );
+        console.error(
+          "CEBİ Receipt raw Gemini response:",
+          responseText
+        );
+
+        res.status(502).json({
+          error:
+            "Gemini fiş analiz sonucunu geçerli JSON olarak döndürmedi.",
+        });
+        return;
+      }
+
+      const receipt = normalizeReceiptResult(
+        parsed
+      );
+
+      if (receipt.total === null) {
+        res.status(422).json({
+          error:
+            "Fişten toplam tutar güvenilir şekilde okunamadı. Lütfen daha net bir fotoğraf çek.",
+          receipt,
+        });
+        return;
+      }
+
+      res.json({
+        receipt,
+        isRuleBased: false,
+      });
+    } catch (error: any) {
+      console.error(
+        "CEBİ Receipt Analysis API error:",
+        error
+      );
+
+      res.status(500).json({
+        error:
+          error?.message ||
+          "Fiş analiz edilirken beklenmeyen bir hata oluştu.",
+      });
+    }
+  }
+);
 
 /**
  * =========================================================
